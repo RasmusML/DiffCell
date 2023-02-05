@@ -1,0 +1,2 @@
+Lafarge: http://proceedings.mlr.press/v102/lafarge19a/lafarge19a.pdf
+Variational Sparse Coding: https://openreview.net/pdf?id=SkeJ6iR9Km
