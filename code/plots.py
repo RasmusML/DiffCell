@@ -18,6 +18,9 @@ def plot_channels(image: torch.Tensor):
         ax.set_title(titles[i])
 
 def _plot_view(image: torch.Tensor) -> torch.Tensor:
-    return image.reshape((68, 68, 3))
+    """
+        3x68x68 -> 68x68x3
+    """
+    return image.permute(1, 2, 0)
 
 
