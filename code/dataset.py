@@ -20,7 +20,7 @@ def load_images_from_metadata(metadata: pd.DataFrame) -> torch.Tensor:
 
 def load_images_from_paths(paths: list[str]) -> torch.Tensor:
     dims = (3, 68, 68)
-    images = np.zeros((len(paths), *dims))
+    images = np.zeros((len(paths), *dims), dtype=np.float32)
     
     for i, path in enumerate(paths):
         images[i] = np.load(path).astype(np.float32).transpose(2, 0, 1)

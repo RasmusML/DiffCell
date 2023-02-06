@@ -1,2 +1,8 @@
-Lafarge: http://proceedings.mlr.press/v102/lafarge19a/lafarge19a.pdf
-Variational Sparse Coding: https://openreview.net/pdf?id=SkeJ6iR9Km
+Papers:
+  - Lafarge: http://proceedings.mlr.press/v102/lafarge19a/lafarge19a.pdf
+  - Variational Sparse Coding: https://openreview.net/pdf?id=SkeJ6iR9Km
+
+
+Directions:
+  - VAE vs diffusion model (betinget) => image reconstruction comparison + new image comparisons
+  - My basic diffusion (conditional) model + pretrained diffusion model
