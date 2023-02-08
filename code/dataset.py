@@ -4,6 +4,7 @@ import pandas as pd
 
 # --- Metadata loading ---
 
+# @Note: Relative to the root
 LOCAL_DATASET_PATH = "./data/singlecell/"
 SERVER_HOSTED_DATASET_PATH = "/zhome/70/5/14854/nobackup/deeplearningf22/bbbc021/singlecell/"
 
