@@ -1,8 +1,16 @@
 Papers:
   - Lafarge: http://proceedings.mlr.press/v102/lafarge19a/lafarge19a.pdf
+  - Diffusion models article (short): https://lilianweng.github.io/posts/2021-07-11-diffusion-models/
+  - Diffusion models paper: https://arxiv.org/pdf/2006.11239.pdf
+
+
   - Variational Sparse Coding: https://openreview.net/pdf?id=SkeJ6iR9Km
 
 
-Directions:
-  - VAE vs diffusion model (betinget) => image reconstruction comparison + new image comparisons
-  - My basic diffusion (conditional) model + pretrained diffusion model
+Direction:
+(0. VAE)
+1. diffusion model
+2. conditional diffusion model
+1-2. treatment classifier (moa + concentration), regression on the concentration level (apply log on concentrations?)
+
+

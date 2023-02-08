@@ -1,2 +1,2 @@
-# GMFPP
-> Generative Models for Phenotypic Profilling
+# 🦠 DiffCell
+> Conditional Generative Modelling for Phenotypic Profilling

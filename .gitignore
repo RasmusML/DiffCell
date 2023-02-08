@@ -1,4 +1,10 @@
+dev.py
+tmp.ipynb
 singlecell/
+
+models/
+runs/
+results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

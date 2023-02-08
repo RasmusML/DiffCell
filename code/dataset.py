@@ -3,18 +3,22 @@ import torch
 import pandas as pd
 
 # --- Metadata loading ---
-METADATA_PATH = "./data/singlecell/metadata.csv"
 
-def load_metadata() -> pd.DataFrame:
-    return pd.read_csv(METADATA_PATH)
+LOCAL_DATASET_PATH = "./data/singlecell/"
+SERVER_HOSTED_DATASET_PATH = "/zhome/70/5/14854/nobackup/deeplearningf22/bbbc021/singlecell/"
 
+def get_dataset_path(local_path: bool = True) -> str:
+    return LOCAL_DATASET_PATH if local_path else SERVER_HOSTED_DATASET_PATH
+
+def load_metadata(local_path: bool = True) -> pd.DataFrame:
+    path = get_dataset_path(local_path)
+    return pd.read_csv(path + "metadata.csv")
 
 # --- Image loading ---
-# @Note: relative to the root directory
-IMAGES_DIR = "./data/singlecell/singh_cp_pipeline_singlecell_images"
 
-def load_images_from_metadata(metadata: pd.DataFrame) -> torch.Tensor:
-    paths = metadata.apply(lambda r: "{}/{}".format(IMAGES_DIR, _image_path(r)), axis=1).tolist()
+def load_images_from_metadata(metadata: pd.DataFrame, local_path: bool = True) -> torch.Tensor:
+    path = get_dataset_path(local_path)
+    paths = metadata.apply(lambda r: "{}/{}".format(path, _get_relative_image_path(r)), axis=1).tolist()
     return load_images_from_paths(paths)
 
 
@@ -33,9 +37,9 @@ def load_image(path: str) -> torch.Tensor:
     return torch.from_numpy(np_image)
 
 
-def _image_path(row: pd.Series) -> str:
+def _get_relative_image_path(row: pd.Series) -> str:
     """ concats the multi cell folder name and file name """
-    return "{}/{}".format(row["Multi_Cell_Image_Name"], row["Single_Cell_Image_Name"])
+    return "singh_cp_pipeline_singlecell_images/{}/{}".format(row["Multi_Cell_Image_Name"], row["Single_Cell_Image_Name"])
 
 
 # --- Image normalization ---
@@ -54,6 +58,18 @@ def normalize_channel_wise(images: torch.Tensor) -> torch.Tensor:
 def normalize_constant(images: torch.Tensor) -> torch.Tensor:
     return images / 40_000
 
+def normalized_to_zscore(images: torch.Tensor) -> torch.Tensor:
+    """ [0,1] -> [-1,1] """
+    return 2 * images.clamp(0, 1) - 1
+
+def zscore_to_normalized(images: torch.Tensor) -> torch.Tensor:
+    """ [-1,1] -> [0,1]"""
+    return (images.clamp(-1,1) + 1) / 2
+
+def view_cropped_images(images: torch.Tensor) -> torch.Tensor:
+    return images[:,:,2:-2,2:-2]
+
+# --- Metadata types ---
 def get_all_MOA_types() -> np.ndarray:
     return np.array([
            'Actin disruptors', 'Aurora kinase inhibitors',
