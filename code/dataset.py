@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import pandas as pd
+import itertools
 
 # --- Metadata loading ---
 
@@ -34,7 +35,37 @@ def load_images_from_metadata(metadata: pd.DataFrame, local_path: bool = True) -
     
     return torch.from_numpy(images)
 
+def stratify_metadata(metadata: pd.DataFrame, images_per_treatment=100, whitelist=None, blacklist=None) -> pd.DataFrame:
+    assert (not whitelist) or (not blacklist)
 
+    if whitelist:
+        treatments = whitelist
+    else:
+        moas = get_all_MOA_types()
+        concentration = get_all_concentration_types()
+        treatments = list(itertools.product(moas, concentration))
+
+    if blacklist:
+        # treatments to ignore
+        #treatments.remove(('Protein synthesis', 0.3))
+        treatments.remove(blacklist)
+
+    groups = metadata.groupby(by=["moa", "Image_Metadata_Concentration"])
+    stratified = pd.DataFrame(columns=metadata.columns)
+
+    for treatment in treatments:
+        try:
+            group = groups.get_group(treatment)
+
+            if not isinstance(group, pd.DataFrame):
+                raise Exception("Group is not a DataFrame")
+
+            stratified = pd.concat([stratified, group[:images_per_treatment]])
+
+        except Exception:
+            pass # treatment combination not in metadata
+
+    return stratified
 
 def _get_relative_image_path(row: pd.Series) -> str:
     """ concats the multi cell folder name and file name """

@@ -17,13 +17,15 @@ if __name__ == '__main__':
     is_local = not args.server
 
     metadata = load_metadata(is_local)
-    small_metadata = metadata[:3000]
 
-    images = load_images_from_metadata(small_metadata, is_local)
+    #train_metadata = metadata[:3000]
+    train_metadata = stratify_metadata(metadata, 50)
+
+    images = load_images_from_metadata(train_metadata, is_local)
 
     images = normalize_channel_wise(images)
     images = normalized_to_zscore(images)
 
     cropped_images = view_cropped_images(images)
-    train(cropped_images, epochs=20, batch_size=2)
+    train(cropped_images, epochs=20, batch_size=2, epoch_sample_times=10)
 

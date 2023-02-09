@@ -253,7 +253,7 @@ class Diffusion:
         return x
 
 
-def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=2):
+def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Unconditional"
@@ -293,7 +293,7 @@ def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_
 
             sampled_images = diffusion.sample(model, N_images=images.shape[0])
 
-            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.numpy() / 255.0)
+            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.cpu().numpy() / 255.0)
             save_images(sampled_images, os.path.join("results", run_name, f"{epoch}.jpg"))
     
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
