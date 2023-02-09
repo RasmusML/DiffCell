@@ -8,4 +8,4 @@
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
 echo "Running script..."
-python3 $1 $2 $3
+python3 $1 $2

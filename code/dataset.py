@@ -8,6 +8,8 @@ import pandas as pd
 LOCAL_DATASET_PATH = "./data/singlecell/"
 SERVER_HOSTED_DATASET_PATH = "/zhome/70/5/14854/nobackup/deeplearningf22/bbbc021/singlecell/"
 
+EPOCH_IMAGE_DIR = "./results/DDPM_Unconditional/"
+
 def get_dataset_path(local_path: bool = True) -> str:
     return LOCAL_DATASET_PATH if local_path else SERVER_HOSTED_DATASET_PATH
 
@@ -18,24 +20,20 @@ def load_metadata(local_path: bool = True) -> pd.DataFrame:
 # --- Image loading ---
 
 def load_images_from_metadata(metadata: pd.DataFrame, local_path: bool = True) -> torch.Tensor:
+    """
+        out: N x c x h x w
+    """
     path = get_dataset_path(local_path)
     paths = metadata.apply(lambda r: "{}/{}".format(path, _get_relative_image_path(r)), axis=1).tolist()
-    return load_images_from_paths(paths)
 
-
-def load_images_from_paths(paths: list[str]) -> torch.Tensor:
-    dims = (3, 68, 68)
-    images = np.zeros((len(paths), *dims), dtype=np.float32)
+    dim = (3, 68, 68)
+    images = np.zeros((len(paths), *dim), dtype=np.float32)
     
     for i, path in enumerate(paths):
         images[i] = np.load(path).astype(np.float32).transpose(2, 0, 1)
     
     return torch.from_numpy(images)
 
-
-def load_image(path: str) -> torch.Tensor:
-    np_image = np.load(path).astype(np.float32).transpose(2, 0, 1)
-    return torch.from_numpy(np_image)
 
 
 def _get_relative_image_path(row: pd.Series) -> str:
@@ -83,3 +81,29 @@ def get_all_concentration_types():
     return np.array([0.0e+00, 1.0e-03, 3.0e-03, 1.0e-02, 3.0e-02, 1.0e-01, 3.0e-01,
        1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 5.0e+00, 6.0e+00, 1.0e+01,
        1.5e+01, 2.0e+01, 3.0e+01, 5.0e+01, 1.0e+02])
+
+
+# --- Loading result images ---
+from os import listdir
+from os.path import isfile, join
+
+def get_files_in_dir(path: str):
+    files = [f for f in listdir(path) if isfile(join(path, f))]
+    files.sort()
+    return files
+
+def filter_file_extension(files: list[str], extension: str):
+    return list(filter(lambda path: path.endswith(extension), files))
+
+def load_epoch_images():
+    file_names = get_files_in_dir(EPOCH_IMAGE_DIR)
+    npy_file_names = filter_file_extension(file_names, ".npy")
+    paths = [join(EPOCH_IMAGE_DIR, image_name) for image_name in npy_file_names]
+
+    images = np.array([np.load(path) for path in paths])
+    epoch_list = [int(name.split(".")[0]) for name in npy_file_names]
+    epochs = torch.from_numpy(np.array(epoch_list, dtype=np.int32))
+    
+    return torch.from_numpy(images), epochs
+
+

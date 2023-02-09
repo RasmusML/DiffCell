@@ -119,4 +119,65 @@ def _plot_permute(image: torch.Tensor) -> torch.Tensor:
     assert image.shape[0] == 3
     return image.permute(1, 2, 0)
 
+def plot_epoch_sample_series(images: torch.Tensor, epochs: torch.Tensor, path=None):
+    """
+        Example: 10 epoch, each with 4 sample images has input dim: [10, 4, 3, 68, 68]
+    """
+    n_cols = images.shape[0]
+    n_rows = images.shape[1]
+    
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols,n_rows))
+    fig.subplots_adjust(wspace=0.05, hspace=0.05)
+
+    fig.suptitle("Training | Samples at Different Epochs")
+    fig.text(0.5, 0.0, "Epoch", ha="center")
+    fig.text(0.0, 0.5, "Samples", va="center", rotation="vertical")
+
+    for r in range(n_rows):
+        for c in range(n_cols):
+            ax = axs[r,c]
+
+            ax.imshow(_plot_permute(images[c, r]))
+            ax.set_yticks([])
+            ax.set_xticks([])
+
+            if r == n_rows-1:
+                ax.set_xlabel(epochs[c].item())
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
+
+def flatten_images_to_plot(images: torch.Tensor) -> torch.Tensor:
+    """ 8x3x64x64 -> 3x64x8*64 """
+    return images.permute(1, 2, 0, 3).flatten(start_dim=2)
+
+
+def plot_images(images: torch.Tensor, title=None, path=None):
+    """
+        Example: 4 sample images has input dim: [4, 3, 68, 68]
+    """
+    n_cols = images.shape[0]
+    
+    fig, axs = plt.subplots(ncols=n_cols, figsize=(n_cols,1))
+    fig.subplots_adjust(wspace=0.05, hspace=0.05)
+
+    if title:
+        fig.subplots_adjust(top=0.75)
+        fig.suptitle(title)
+        
+    for c in range(n_cols):
+        ax = axs[c]
+
+        ax.imshow(_plot_permute(images[c]))
+        ax.set_yticks([])
+        ax.set_xticks([])
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
 

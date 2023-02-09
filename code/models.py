@@ -1,6 +1,7 @@
 import os
 import torch
 import torchvision
+import numpy as np
 from PIL import Image
 
 def save_images(images, path, **kwargs):
@@ -25,9 +26,8 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 class SelfAttention(nn.Module):
-    
     def __init__(self, channels):
-        super(SelfAttention, self).__init__()
+        super().__init__()
         
         self.channels = channels        
         self.mha = nn.MultiheadAttention(channels, 4, batch_first=True)
@@ -51,7 +51,7 @@ class SelfAttention(nn.Module):
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels, mid_channels=None, residual=False):
-        super(DoubleConv, self).__init__()
+        super().__init__()
         
         self.residual = residual
         
@@ -75,7 +75,7 @@ class DoubleConv(nn.Module):
 
 class Down(nn.Module):
     def __init__(self, in_channels, out_channels, emb_dim=256):
-        super(Down, self).__init__()
+        super().__init__()
         
         self.maxpool_conv = nn.Sequential(
             nn.MaxPool2d(2),
@@ -121,7 +121,7 @@ class Up(nn.Module):
 
 class UNet(nn.Module):
     def __init__(self, c_in=3, c_out=3, time_dim=256):
-        super(UNet, self).__init__()
+        super().__init__()
         
         self.time_dim = time_dim
         self.inc = DoubleConv(c_in, 64)
@@ -198,17 +198,14 @@ class UNet(nn.Module):
         return self.unet_forwad(x, t)
 
 
-import torch
-import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 import logging
-from torch.utils.tensorboard.writer import SummaryWriter
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 
 class Diffusion:
-    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=256, device="cuda"):
+    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64, device="cpu"):
         self.noise_steps = noise_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
@@ -225,19 +222,20 @@ class Diffusion:
     def noise_images(self, x, t):
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
         sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None, None, None]
-        Ɛ = torch.randn_like(x)
-        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * Ɛ, Ɛ
+        eps = torch.randn_like(x)
+        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * eps, eps
 
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
-    def sample(self, model, n):
-        logging.info(f"Sampling {n} new images....")
+    def sample(self, model, N_images):
+        logging.info(f"Sampling {N_images} new images....")
         model.eval()
+
         with torch.no_grad():
-            x = torch.randn((n, 3, self.img_size, self.img_size)).to(self.device)
+            x = torch.randn((N_images, 3, self.img_size, self.img_size)).to(self.device)
             for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
-                t = (torch.ones(n) * i).long().to(self.device)
+                t = (torch.ones(N_images) * i).long().to(self.device)
                 predicted_noise = model(x, t)
                 alpha = self.alpha[t][:, None, None, None]
                 alpha_hat = self.alpha_hat[t][:, None, None, None]
@@ -247,32 +245,35 @@ class Diffusion:
                 else:
                     noise = torch.zeros_like(x)
                 x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
+
         model.train()
         x = (x.clamp(-1, 1) + 1) / 2
         x = (x * 255).type(torch.uint8)
+
         return x
 
 
-def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4):
-    run_name = "DDPM_Uncondtional"
-    setup_logging(run_name)
-    logger = SummaryWriter(os.path.join("runs", run_name))
+def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=2):
+    assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
+    run_name = "DDPM_Unconditional"
+    setup_logging(run_name)
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
     
     dataloader = DataLoader(images, batch_size=batch_size, shuffle=True)
     model = UNet().to(device)
-    
     optimizer = optim.AdamW(model.parameters(), lr=lr)
     mse = nn.MSELoss()
-    
-    diffusion = Diffusion(img_size=image_size, device=device, noise_steps=1000)
-    
-    l = len(dataloader)
+    diffusion = Diffusion(img_size=image_size, noise_steps=1000, device=device)
 
+    k = 0
+    epoch_sample_points = torch.linspace(0, epochs-1, epoch_sample_times, dtype=torch.int32)
+    
     for epoch in range(epochs):
         logging.info(f"Starting epoch {epoch}:")
+
         pbar = tqdm(dataloader)
         for i, images in enumerate(pbar):
             images = images.to(device)
@@ -286,11 +287,14 @@ def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4):
             optimizer.step()
 
             pbar.set_postfix(MSE=loss.item())
-            logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-    sampled_images = diffusion.sample(model, n=images.shape[0])
-    save_images(sampled_images, os.path.join("results", run_name, f"{epochs}.jpg"))
-    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+        if epoch == epoch_sample_points[k]:
+            k += 1
 
-    return sampled_images
+            sampled_images = diffusion.sample(model, N_images=images.shape[0])
+
+            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.numpy() / 255.0)
+            save_images(sampled_images, os.path.join("results", run_name, f"{epoch}.jpg"))
+    
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
 

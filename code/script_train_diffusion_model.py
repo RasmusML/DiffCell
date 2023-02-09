@@ -19,7 +19,7 @@ if __name__ == '__main__':
     metadata = load_metadata(is_local)
     small_metadata = metadata[:3000]
 
-    images = load_images_from_metadata(small_metadata)
+    images = load_images_from_metadata(small_metadata, is_local)
 
     images = normalize_channel_wise(images)
     images = normalized_to_zscore(images)
