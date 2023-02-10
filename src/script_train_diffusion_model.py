@@ -1,6 +1,7 @@
-from src.models import *
-from src.dataset import *
-from src.plots import *
+from models import *
+from dataset import *
+from plots import *
+from utils import *
 
 import argparse
 
@@ -13,8 +14,13 @@ if __name__ == '__main__':
     parser.add_argument("--server", action="store_true")
     parser.set_defaults(server=False)
 
+    parser.add_argument("--unconditional", action="store_true")
+    parser.set_defaults(unconditional=False)
+
     args = parser.parse_args()
     is_local = not args.server
+
+    fix_seed()
 
     print("loading data")
     metadata = load_metadata(is_local)
@@ -32,5 +38,8 @@ if __name__ == '__main__':
 
     print("training")
     cropped_images = view_cropped_images(images)
-    train(cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
 
+    if args.unconditional:
+        train_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
+    else:
+        train_conditional_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)

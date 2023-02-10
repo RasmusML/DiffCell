@@ -2,7 +2,10 @@ import os
 import torch
 import torchvision
 import numpy as np
+import pandas as pd
 from PIL import Image
+
+from dataset import get_all_MOA_types
 
 def save_images(images, path, **kwargs):
     grid = torchvision.utils.make_grid(images, **kwargs)
@@ -23,7 +26,7 @@ def one_param(m):
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 
 class SelfAttention(nn.Module):
     def __init__(self, channels):
@@ -198,6 +201,26 @@ class UNet(nn.Module):
         return self.unet_forwad(x, t)
 
 
+class UNet_conditional(UNet):
+    def __init__(self, c_in=3, c_out=3, time_dim=256, n_classes=None):
+        super().__init__(c_in, c_out, time_dim)
+
+        if n_classes is not None:
+            self.label_emb = nn.Embedding(n_classes, time_dim)
+
+
+    def forward(self, x, t, y=None):
+        t = t.unsqueeze(-1)
+        t = self.pos_encoding(t, self.time_dim)
+
+
+        if y is not None:
+            t += self.label_emb(y)
+
+
+        return self.unet_forwad(x, t)
+
+
 from tqdm import tqdm
 from torch import optim
 import logging
@@ -252,8 +275,82 @@ class Diffusion:
 
         return x
 
+class Diffusion_conditional:
+    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64, device="cpu"):
+        self.noise_steps = noise_steps
+        self.beta_start = beta_start
+        self.beta_end = beta_end
+        self.img_size = img_size
+        self.device = device
 
-def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
+        self.beta = self.prepare_noise_schedule().to(device)
+        self.alpha = 1. - self.beta
+        self.alpha_hat = torch.cumprod(self.alpha, dim=0)
+
+    def prepare_noise_schedule(self):
+        return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
+
+    def noise_images(self, x, t):
+        sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
+        sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None, None, None]
+        eps = torch.randn_like(x)
+        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * eps, eps
+
+    def sample_timesteps(self, n):
+        return torch.randint(low=1, high=self.noise_steps, size=(n,))
+
+    def sample(self, model, N_images, labels, cfg_scale=3):
+            logging.info(f"Sampling {N_images} new images....")
+            model.eval()
+
+            with torch.no_grad():
+                x = torch.randn((N_images, 3, self.img_size, self.img_size)).to(self.device)
+
+                for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
+                    t = (torch.ones(N_images) * i).long().to(self.device)
+                    predicted_noise = model(x, t, labels)
+
+                    if cfg_scale > 0:
+                        uncond_predicted_noise = model(x, t, None)
+                        predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
+
+                    alpha = self.alpha[t][:, None, None, None]
+                    alpha_hat = self.alpha_hat[t][:, None, None, None]
+                    beta = self.beta[t][:, None, None, None]
+
+                    if i > 1:
+                        noise = torch.randn_like(x)
+                    else:
+                        noise = torch.zeros_like(x)
+
+                    x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
+
+            model.train()
+            x = (x.clamp(-1, 1) + 1) / 2
+            x = (x * 255).type(torch.uint8)
+
+            return x
+
+
+def get_MOA_mappings():
+    moa_types = get_all_MOA_types()
+    
+    moa_to_id = {}
+    id_to_moa = {}
+    for i, moa in enumerate(moa_types):
+        moa_to_id[moa] = i
+        id_to_moa[i] = moa
+        
+    return moa_to_id, id_to_moa
+
+def prepare_dataset_for_training(metadata: pd.DataFrame, images: torch.Tensor) -> TensorDataset:
+    moa_to_id, id_to_moa = get_MOA_mappings()
+    moa = torch.from_numpy(np.array([moa_to_id[m] for m in metadata["moa"]]))
+    concentrations = torch.from_numpy(np.array(metadata["Image_Metadata_Concentration"], dtype=np.float32))
+    dataset = TensorDataset(images, concentrations, moa)
+    return dataset
+
+def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Unconditional"
@@ -262,7 +359,9 @@ def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
     
-    dataloader = DataLoader(images, batch_size=batch_size, shuffle=True)
+    dataset = prepare_dataset_for_training(metadata, images)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
     model = UNet().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr)
     mse = nn.MSELoss()
@@ -275,8 +374,9 @@ def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_
         logging.info(f"Starting epoch {epoch}:")
 
         pbar = tqdm(dataloader)
-        for i, images in enumerate(pbar):
+        for i, (images, _, _) in enumerate(pbar):
             images = images.to(device)
+
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
             predicted_noise = model(x_t, t)
@@ -293,8 +393,69 @@ def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_
 
             sampled_images = diffusion.sample(model, N_images=images.shape[0])
 
-            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.cpu().numpy() / 255.0)
+            np.save(os.path.join("results", run_name, f"{epoch + 1}.npy"), sampled_images.cpu().numpy() / 255.0)
             save_images(sampled_images, os.path.join("results", run_name, f"{epoch + 1}.jpg"))
     
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch + 1}.pt"))
+
+
+def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
+    assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
+
+    run_name = "DDPM_Conditional"
+    setup_logging(run_name)
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logging.info(f"Using device: {device}")
+    
+    dataset = prepare_dataset_for_training(metadata, images)
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    n_classes = len(get_all_MOA_types())
+
+    model = UNet_conditional(n_classes=n_classes).to(device)
+    optimizer = optim.AdamW(model.parameters(), lr=lr)
+    mse = nn.MSELoss()
+    diffusion = Diffusion_conditional(img_size=image_size, noise_steps=1000, device=device)
+
+    k = 0
+    epoch_sample_points = torch.linspace(0, epochs-1, epoch_sample_times, dtype=torch.int32)
+    
+    for epoch in range(epochs):
+        logging.info(f"Starting epoch {epoch}:")
+
+        pbar = tqdm(dataloader)
+        for i, (images, concentrations, moa) in enumerate(pbar):
+            images = images.to(device)
+            concentrations = concentrations.to(device)
+            moa = moa.to(device)
+
+            labels = moa # @TODO: include concentration
+
+            t = diffusion.sample_timesteps(images.shape[0]).to(device)
+            x_t, noise = diffusion.noise_images(images, t)
+
+            if np.random.random() < 0.1:
+                labels = None
+
+            predicted_noise = model(x_t, t, labels)
+            loss = mse(noise, predicted_noise)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            pbar.set_postfix(MSE=loss.item())
+
+        if epoch == epoch_sample_points[k]:
+            k += 1
+
+            labels = torch.arange(n_classes).long().to(device)
+            sampled_images = diffusion.sample(model, N_images=len(labels), labels=labels)
+
+            np.save(os.path.join("results", run_name, f"{epoch + 1}.npy"), sampled_images.cpu().numpy() / 255.0)
+            save_images(sampled_images, os.path.join("results", run_name, f"{epoch + 1}.jpg"))
+    
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch + 1}.pt"))
+
 

@@ -5,6 +5,8 @@ import itertools
 
 from typing import List, Tuple
 
+from utils import *
+
 # --- Metadata loading ---
 
 # @Note: Relative to the root
@@ -115,22 +117,19 @@ def get_all_MOA_types() -> np.ndarray:
            'Microtubule destabilizers', 'Microtubule stabilizers',
            'Protein degradation', 'Protein synthesis'])
 
-def get_all_concentration_types():
+def get_all_concentration_types() -> np.ndarray:
     return np.array([0.0e+00, 1.0e-03, 3.0e-03, 1.0e-02, 3.0e-02, 1.0e-01, 3.0e-01,
        1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 5.0e+00, 6.0e+00, 1.0e+01,
        1.5e+01, 2.0e+01, 3.0e+01, 5.0e+01, 1.0e+02])
 
+def get_treatment_types() -> List[Tuple[str, float]]:
+    moas = get_all_MOA_types()
+    concentration = get_all_concentration_types()
+    treatments = list(itertools.product(moas, concentration))
+    return treatments
+
 
 # --- Loading result images ---
-from os import listdir
-from os.path import isfile, join
-
-def get_files_in_dir(path: str):
-    return [f for f in listdir(path) if isfile(join(path, f))]
-
-def filter_file_extension(files: list[str], extension: str):
-    return list(filter(lambda path: path.endswith(extension), files))
-
 def load_epoch_images():
     file_names = get_files_in_dir(EPOCH_IMAGE_DIR)
     npy_file_names = filter_file_extension(file_names, ".npy")
