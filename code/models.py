@@ -294,7 +294,7 @@ def train(images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_
             sampled_images = diffusion.sample(model, N_images=images.shape[0])
 
             np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.cpu().numpy() / 255.0)
-            save_images(sampled_images, os.path.join("results", run_name, f"{epoch}.jpg"))
+            save_images(sampled_images, os.path.join("results", run_name, f"{epoch + 1}.jpg"))
     
-            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch + 1}.pt"))
 

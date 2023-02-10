@@ -1,6 +1,9 @@
-from dataset import *
-from models import *
-from plots import *
+import sys
+sys.path.append("./code")
+
+from code.models import *
+from code.dataset import *
+from code.plots import *
 
 import argparse
 
@@ -19,7 +22,9 @@ if __name__ == '__main__':
     metadata = load_metadata(is_local)
 
     #train_metadata = metadata[:3000]
-    train_metadata = stratify_metadata(metadata, 50)
+    #train_metadata = stratify_metadata(metadata, 50)
+    blacklist = [("Eg5 inhibitors", 0.1), ("Microtubule destabilizers", 0.3), ("Cholesterol-lowering", 6.0)]
+    train_metadata = stratify_metadata(metadata, 60, blacklist=blacklist)
 
     images = load_images_from_metadata(train_metadata, is_local)
 
@@ -27,5 +32,5 @@ if __name__ == '__main__':
     images = normalized_to_zscore(images)
 
     cropped_images = view_cropped_images(images)
-    train(cropped_images, epochs=20, batch_size=2, epoch_sample_times=10)
+    train(cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
 

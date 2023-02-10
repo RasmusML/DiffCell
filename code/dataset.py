@@ -3,6 +3,8 @@ import torch
 import pandas as pd
 import itertools
 
+from typing import List, Tuple
+
 # --- Metadata loading ---
 
 # @Note: Relative to the root
@@ -35,7 +37,11 @@ def load_images_from_metadata(metadata: pd.DataFrame, local_path: bool = True) -
     
     return torch.from_numpy(images)
 
-def stratify_metadata(metadata: pd.DataFrame, images_per_treatment=100, whitelist=None, blacklist=None) -> pd.DataFrame:
+def stratify_metadata(metadata: pd.DataFrame, images_per_treatment=100, 
+                      whitelist: List[Tuple[str, str]] | None = None, 
+                      blacklist: List[Tuple[str, str]] | None = None) -> pd.DataFrame:
+
+
     assert (not whitelist) or (not blacklist)
 
     if whitelist:
@@ -46,9 +52,10 @@ def stratify_metadata(metadata: pd.DataFrame, images_per_treatment=100, whitelis
         treatments = list(itertools.product(moas, concentration))
 
     if blacklist:
-        # treatments to ignore
-        #treatments.remove(('Protein synthesis', 0.3))
-        treatments.remove(blacklist)
+        for treatment in blacklist:
+            # treatments to ignore
+            #treatments.remove(('Protein synthesis', 0.3))
+            treatments.remove(treatment)
 
     groups = metadata.groupby(by=["moa", "Image_Metadata_Concentration"])
     stratified = pd.DataFrame(columns=metadata.columns)
@@ -119,9 +126,7 @@ from os import listdir
 from os.path import isfile, join
 
 def get_files_in_dir(path: str):
-    files = [f for f in listdir(path) if isfile(join(path, f))]
-    files.sort()
-    return files
+    return [f for f in listdir(path) if isfile(join(path, f))]
 
 def filter_file_extension(files: list[str], extension: str):
     return list(filter(lambda path: path.endswith(extension), files))
@@ -131,10 +136,14 @@ def load_epoch_images():
     npy_file_names = filter_file_extension(file_names, ".npy")
     paths = [join(EPOCH_IMAGE_DIR, image_name) for image_name in npy_file_names]
 
-    images = np.array([np.load(path) for path in paths])
-    epoch_list = [int(name.split(".")[0]) for name in npy_file_names]
-    epochs = torch.from_numpy(np.array(epoch_list, dtype=np.int32))
+    epoch_arr = np.array([int(name.split(".")[0]) for name in npy_file_names], dtype=np.int32)
+    epoch_ordering = np.argsort(epoch_arr)
+
+    image_list = [np.load(path) for path in paths]
+    images = np.array([image_list[i] for i in epoch_ordering])
+
+    epoch_arr.sort()
     
-    return torch.from_numpy(images), epochs
+    return torch.from_numpy(images), torch.from_numpy(epoch_arr)
 
 

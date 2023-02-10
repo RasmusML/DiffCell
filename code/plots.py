@@ -131,7 +131,7 @@ def plot_epoch_sample_series(images: torch.Tensor, epochs: torch.Tensor, path=No
 
     fig.suptitle("Training | Samples at Different Epochs")
     fig.text(0.5, 0.0, "Epoch", ha="center")
-    fig.text(0.0, 0.5, "Samples", va="center", rotation="vertical")
+    fig.text(0.1, 0.5, "Samples", va="center", rotation="vertical")
 
     for r in range(n_rows):
         for c in range(n_cols):

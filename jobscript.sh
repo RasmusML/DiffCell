@@ -7,5 +7,4 @@
 #BSUB -R "rusage[mem=64GB]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
-echo "Running script..."
-python3 $1 $2
+python3 $1 $2 # usage: python3 -m script.example 
