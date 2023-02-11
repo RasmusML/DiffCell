@@ -1,28 +1,18 @@
-from models import *
 from dataset import *
 from plots import *
 from utils import *
+from models import *
 
 import argparse
+import logging
 
-if __name__ == '__main__':
-
-    parser = argparse.ArgumentParser(
-            prog = 'diffusion model train script',
-            description = 'Script to train a diffusion model')
-
-    parser.add_argument("--server", action="store_true")
-    parser.set_defaults(server=False)
-
-    parser.add_argument("--unconditional", action="store_true")
-    parser.set_defaults(unconditional=False)
-
-    args = parser.parse_args()
-    is_local = not args.server
-
+def main(args):
     fix_seed()
 
+    logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
+
     print("loading data")
+    is_local = not args.server
     metadata = load_metadata(is_local)
 
     #train_metadata = metadata[:3000]
@@ -43,3 +33,19 @@ if __name__ == '__main__':
         train_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
     else:
         train_conditional_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(
+            prog = 'diffusion model training script',
+            description = 'Script to train a diffusion model')
+
+    parser.add_argument("--server", action="store_true")
+    parser.set_defaults(server=False)
+
+    parser.add_argument("--unconditional", action="store_true")
+    parser.set_defaults(unconditional=False)
+
+    args = parser.parse_args()
+ 
+    main(args)

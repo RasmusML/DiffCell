@@ -9,11 +9,8 @@ from utils import *
 
 # --- Metadata loading ---
 
-# @Note: Relative to the root
-LOCAL_DATASET_PATH = "./data/singlecell/"
+LOCAL_DATASET_PATH = "data/singlecell/"
 SERVER_HOSTED_DATASET_PATH = "/zhome/70/5/14854/nobackup/deeplearningf22/bbbc021/singlecell/"
-
-EPOCH_IMAGE_DIR = "./results/DDPM_Unconditional/"
 
 def get_dataset_path(local_path: bool = True) -> str:
     return LOCAL_DATASET_PATH if local_path else SERVER_HOSTED_DATASET_PATH
@@ -23,7 +20,6 @@ def load_metadata(local_path: bool = True) -> pd.DataFrame:
     return pd.read_csv(path + "metadata.csv")
 
 # --- Image loading ---
-
 def load_images_from_metadata(metadata: pd.DataFrame, local_path: bool = True) -> torch.Tensor:
     """
         out: N x c x h x w
@@ -38,6 +34,7 @@ def load_images_from_metadata(metadata: pd.DataFrame, local_path: bool = True) -
         images[i] = np.load(path).astype(np.float32).transpose(2, 0, 1)
     
     return torch.from_numpy(images)
+
 
 def stratify_metadata(metadata: pd.DataFrame, images_per_treatment=100, 
                       whitelist: List[Tuple[str, str]] | None = None, 
@@ -97,16 +94,20 @@ def normalize_channel_wise(images: torch.Tensor) -> torch.Tensor:
 def normalize_constant(images: torch.Tensor) -> torch.Tensor:
     return images / 40_000
 
+
 def normalized_to_zscore(images: torch.Tensor) -> torch.Tensor:
     """ [0,1] -> [-1,1] """
     return 2 * images.clamp(0, 1) - 1
+
 
 def zscore_to_normalized(images: torch.Tensor) -> torch.Tensor:
     """ [-1,1] -> [0,1]"""
     return (images.clamp(-1,1) + 1) / 2
 
+
 def view_cropped_images(images: torch.Tensor) -> torch.Tensor:
     return images[:,:,2:-2,2:-2]
+
 
 # --- Metadata types ---
 def get_all_MOA_types() -> np.ndarray:
@@ -117,10 +118,12 @@ def get_all_MOA_types() -> np.ndarray:
            'Microtubule destabilizers', 'Microtubule stabilizers',
            'Protein degradation', 'Protein synthesis'])
 
+
 def get_all_concentration_types() -> np.ndarray:
     return np.array([0.0e+00, 1.0e-03, 3.0e-03, 1.0e-02, 3.0e-02, 1.0e-01, 3.0e-01,
        1.0e+00, 1.5e+00, 2.0e+00, 3.0e+00, 5.0e+00, 6.0e+00, 1.0e+01,
        1.5e+01, 2.0e+01, 3.0e+01, 5.0e+01, 1.0e+02])
+
 
 def get_treatment_types() -> List[Tuple[str, float]]:
     moas = get_all_MOA_types()
@@ -130,17 +133,17 @@ def get_treatment_types() -> List[Tuple[str, float]]:
 
 
 # --- Loading result images ---
-def load_epoch_images():
-    file_names = get_files_in_dir(EPOCH_IMAGE_DIR)
+def load_epoch_images(epoch_image_dir: str):
+    file_names = get_files_in_dir(epoch_image_dir)
     npy_file_names = filter_file_extension(file_names, ".npy")
-    paths = [join(EPOCH_IMAGE_DIR, image_name) for image_name in npy_file_names]
-
+    paths = [join(epoch_image_dir, image_name) for image_name in npy_file_names]
+    
     epoch_arr = np.array([int(name.split(".")[0]) for name in npy_file_names], dtype=np.int32)
     epoch_ordering = np.argsort(epoch_arr)
-
+    
     image_list = [np.load(path) for path in paths]
     images = np.array([image_list[i] for i in epoch_ordering])
-
+    
     epoch_arr.sort()
     
     return torch.from_numpy(images), torch.from_numpy(epoch_arr)

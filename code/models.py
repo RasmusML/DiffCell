@@ -1,6 +1,14 @@
 import os
+import logging
+
+from tqdm import tqdm
 import torch
+from torch import optim
 import torchvision
+import torch.nn as nn
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, TensorDataset
+
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -12,21 +20,19 @@ def save_images(images, path, **kwargs):
     ndarr = grid.permute(1, 2, 0).to('cpu').numpy()
     im = Image.fromarray(ndarr)
     im.save(path)
-    
-def setup_logging(run_name):
+
+
+def setup_results_folder(run_name):
     os.makedirs("models", exist_ok=True)
     os.makedirs("results", exist_ok=True)
     os.makedirs(os.path.join("models", run_name), exist_ok=True)
     os.makedirs(os.path.join("results", run_name), exist_ok=True)
 
+
 def one_param(m):
     "get model first parameter"
     return next(iter(m.parameters()))
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from torch.utils.data import DataLoader, TensorDataset
 
 class SelfAttention(nn.Module):
     def __init__(self, channels):
@@ -75,7 +81,6 @@ class DoubleConv(nn.Module):
         else:
             return self.double_conv(x)
 
-
 class Down(nn.Module):
     def __init__(self, in_channels, out_channels, emb_dim=256):
         super().__init__()
@@ -113,9 +118,7 @@ class Up(nn.Module):
         )
 
     def forward(self, x, skip_x, t):
-        #print("before up | x:", x.shape, "skip_x:", skip_x.shape)
         x = self.up(x)
-        #print("after up | x:", x.shape, "skip_x:", skip_x.shape)
         x = torch.cat([skip_x, x], dim=1)
         x = self.conv(x)
         emb = self.emb_layer(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
@@ -158,32 +161,17 @@ class UNet(nn.Module):
 
     def unet_forwad(self, x, t):
         x1 = self.inc(x)
-        #print("x1 inc:", x1.shape)
         
         x2 = self.down1(x1, t)
-        #print("x2 down1:", x2.shape)
-        
         x2 = self.sa1(x2)
-        #print("x2 sa1:", x2.shape)
-        
         x3 = self.down2(x2, t)
-        #print("x3 down2:", x3.shape)
-
         x3 = self.sa2(x3)
-        #print("x3 sa:", x3.shape)
-        
         x4 = self.down3(x3, t)
-        #print("x4 down3:", x4.shape)
-        
         x4 = self.sa3(x4)
-        #print("x4 sa3:", x4.shape)
-
         x4 = self.bot1(x4)
-        #print("x4 bot1:", x4.shape)
         
         # x4 = self.bot2(x4)
         x4 = self.bot3(x4)
-        #print("x4 bot3:", x4.shape)
 
         x = self.up1(x4, x3, t)
         x = self.sa4(x)
@@ -208,24 +196,16 @@ class UNet_conditional(UNet):
         if n_classes is not None:
             self.label_emb = nn.Embedding(n_classes, time_dim)
 
-
     def forward(self, x, t, y=None):
         t = t.unsqueeze(-1)
         t = self.pos_encoding(t, self.time_dim)
 
-
         if y is not None:
             t += self.label_emb(y)
-
 
         return self.unet_forwad(x, t)
 
 
-from tqdm import tqdm
-from torch import optim
-import logging
-
-logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 
 class Diffusion:
     def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64, device="cpu"):
@@ -253,6 +233,7 @@ class Diffusion:
 
     def sample(self, model, N_images):
         logging.info(f"Sampling {N_images} new images....")
+
         model.eval()
 
         with torch.no_grad():
@@ -274,6 +255,7 @@ class Diffusion:
         x = (x * 255).type(torch.uint8)
 
         return x
+
 
 class Diffusion_conditional:
     def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64, device="cpu"):
@@ -354,7 +336,7 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Unconditional"
-    setup_logging(run_name)
+    setup_results_folder(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
@@ -403,7 +385,7 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Conditional"
-    setup_logging(run_name)
+    setup_results_folder(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
@@ -430,7 +412,7 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
             concentrations = concentrations.to(device)
             moa = moa.to(device)
 
-            labels = moa # @TODO: include concentration
+            labels = moa # @TODO: include concentration (log-scale?)
 
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
@@ -457,5 +439,4 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
             save_images(sampled_images, os.path.join("results", run_name, f"{epoch + 1}.jpg"))
     
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch + 1}.pt"))
-
 
