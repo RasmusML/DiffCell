@@ -22,7 +22,7 @@ def save_images(images, path, **kwargs):
     im.save(path)
 
 
-def setup_results_folder(run_name):
+def make_folders(run_name):
     os.makedirs("models", exist_ok=True)
     os.makedirs("results", exist_ok=True)
     os.makedirs(os.path.join("models", run_name), exist_ok=True)
@@ -80,6 +80,7 @@ class DoubleConv(nn.Module):
             return F.gelu(x + self.double_conv(x))
         else:
             return self.double_conv(x)
+
 
 class Down(nn.Module):
     def __init__(self, in_channels, out_channels, emb_dim=256):
@@ -159,7 +160,7 @@ class UNet(nn.Module):
         pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
         return pos_enc
 
-    def unet_forwad(self, x, t):
+    def unet_forward(self, x, t):
         x1 = self.inc(x)
         
         x2 = self.down1(x1, t)
@@ -186,7 +187,7 @@ class UNet(nn.Module):
     def forward(self, x, t):
         t = t.unsqueeze(-1)
         t = self.pos_encoding(t, self.time_dim)
-        return self.unet_forwad(x, t)
+        return self.unet_forward(x, t)
 
 
 class UNet_conditional(UNet):
@@ -203,7 +204,7 @@ class UNet_conditional(UNet):
         if y is not None:
             t += self.label_emb(y)
 
-        return self.unet_forwad(x, t)
+        return self.unet_forward(x, t)
 
 
 
@@ -238,16 +239,19 @@ class Diffusion:
 
         with torch.no_grad():
             x = torch.randn((N_images, 3, self.img_size, self.img_size)).to(self.device)
+
             for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
                 t = (torch.ones(N_images) * i).long().to(self.device)
                 predicted_noise = model(x, t)
                 alpha = self.alpha[t][:, None, None, None]
                 alpha_hat = self.alpha_hat[t][:, None, None, None]
                 beta = self.beta[t][:, None, None, None]
+
                 if i > 1:
                     noise = torch.randn_like(x)
                 else:
                     noise = torch.zeros_like(x)
+
                 x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
 
         model.train()
@@ -325,6 +329,7 @@ def get_MOA_mappings():
         
     return moa_to_id, id_to_moa
 
+
 def prepare_dataset_for_training(metadata: pd.DataFrame, images: torch.Tensor) -> TensorDataset:
     moa_to_id, id_to_moa = get_MOA_mappings()
     moa = torch.from_numpy(np.array([moa_to_id[m] for m in metadata["moa"]]))
@@ -332,11 +337,12 @@ def prepare_dataset_for_training(metadata: pd.DataFrame, images: torch.Tensor) -
     dataset = TensorDataset(images, concentrations, moa)
     return dataset
 
+
 def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Unconditional"
-    setup_results_folder(run_name)
+    make_folders(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
@@ -385,7 +391,7 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Conditional"
-    setup_results_folder(run_name)
+    make_folders(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")

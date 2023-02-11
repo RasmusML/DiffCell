@@ -24,9 +24,10 @@ def plot_channels(image: torch.Tensor, path=None):
         ax = axs[i]
         c = torch.zeros_like(plt_view)
         c[:,:,i] = plt_view[:,:,i]
+
         ax.set_axis_off()
-        ax.imshow(c)
         ax.set_title(titles[i])
+        ax.imshow(c)
     
     if path:
         plt.savefig(path)

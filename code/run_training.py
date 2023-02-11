@@ -9,9 +9,9 @@ import logging
 def main(args):
     fix_seed()
 
-    logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
+    logging.basicConfig(format="%(asctime)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 
-    print("loading data")
+    logging.info("loading data")
     is_local = not args.server
     metadata = load_metadata(is_local)
 
@@ -20,13 +20,13 @@ def main(args):
     blacklist = [("Eg5 inhibitors", 0.1), ("Microtubule destabilizers", 0.3), ("Cholesterol-lowering", 6.0)]
     train_metadata = stratify_metadata(metadata, 60, blacklist=blacklist)
 
-    print("loading images")
+    logging.info("loading images")
     images = load_images_from_metadata(train_metadata, is_local)
 
     images = normalize_channel_wise(images)
     images = normalized_to_zscore(images)
 
-    print("training")
+    logging.info("training")
     cropped_images = view_cropped_images(images)
 
     if args.unconditional:
