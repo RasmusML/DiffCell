@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from dataset import get_all_MOA_types
+from dataset import get_all_MOA_types, get_all_concentration_types
 
 def save_images(images, path, **kwargs):
     grid = torchvision.utils.make_grid(images, **kwargs)
@@ -264,7 +264,10 @@ class Diffusion:
         if not variance_scheduler:
             variance_scheduler = Cosine_variance_scheduler()
 
-        self.beta, self.alpha, self.alpha_hat = variance_scheduler.get(noise_steps)
+        beta, alpha, alpha_hat = variance_scheduler.get(noise_steps)
+        self.beta = beta.to(device)
+        self.alpha = alpha.to(device)
+        self.alpha_hat = alpha_hat.to(device)
 
     def noise_images(self, x, t):
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
@@ -316,7 +319,10 @@ class Diffusion_conditional:
         if not variance_scheduler:
             variance_scheduler = Cosine_variance_scheduler()
 
-        self.beta, self.alpha, self.alpha_hat = variance_scheduler.get(noise_steps)
+        beta, alpha, alpha_hat = variance_scheduler.get(noise_steps)
+        self.beta = beta.to(device)
+        self.alpha = alpha.to(device)
+        self.alpha_hat = alpha_hat.to(device)
 
     def noise_images(self, x, t):
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
@@ -327,7 +333,7 @@ class Diffusion_conditional:
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
-    def sample(self, model, N_images, labels, cfg_scale=3):
+    def sample(self, model, N_images, labels, y_regr, cfg_scale=3):
             logging.info(f"Sampling {N_images} new images....")
             model.eval()
 
@@ -336,10 +342,9 @@ class Diffusion_conditional:
 
                 for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
                     t = (torch.ones(N_images) * i).long().to(self.device)
-                    predicted_noise = model(x, t, labels)
-
+                    predicted_noise = model(x, t, labels, y_regr)
                     if cfg_scale > 0:
-                        uncond_predicted_noise = model(x, t, None)
+                        uncond_predicted_noise = model(x, t, None, None)
                         predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
 
                     alpha = self.alpha[t][:, None, None, None]
@@ -442,6 +447,7 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     n_classes = len(get_all_MOA_types())
+    regression_labels = torch.tensor(get_all_concentration_types())
     model = UNet_conditional(n_classes).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=lr)
@@ -482,7 +488,13 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
             k += 1
 
             labels = torch.arange(n_classes).long().to(device)
-            sampled_images = diffusion.sample(model, N_images=len(labels), labels=labels)
+
+            random_concentrations = regression_labels[torch.randint(high=n_classes, size=(n_classes,))]
+            y_regr = random_concentrations.clone().float().to(device)
+
+            sampled_images = diffusion.sample(model, N_images=len(labels), labels=labels, y_regr=y_regr)
+
+            logging.info("sampling done")
 
             np.save(os.path.join("results", run_name, f"{epoch + 1}.npy"), sampled_images.cpu().numpy() / 255.0)
             save_images(sampled_images, os.path.join("results", run_name, f"{epoch + 1}.jpg"))
