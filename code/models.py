@@ -207,27 +207,54 @@ class UNet_conditional(UNet):
         return self.unet_forward(x, t)
 
 
-
-class Diffusion:
-    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64, device="cpu"):
-        self.noise_steps = noise_steps
+class Linear_variance_scheduler:
+    """
+        https://arxiv.org/pdf/2006.11239.pdf
+    """
+    def __init__(self, beta_start=1e-4, beta_end=0.02):
         self.beta_start = beta_start
         self.beta_end = beta_end
+
+    def get(self, noise_steps):
+        beta = torch.linspace(self.beta_start, self.beta_end, noise_steps)
+        alpha = 1. - beta
+        alpha_hat = torch.cumprod(alpha, dim=0)
+        return beta, alpha, alpha_hat
+
+
+class Cosine_variance_scheduler:
+    """
+        https://arxiv.org/pdf/2102.09672.pdf
+    """
+    def __init__(self, s_offset=0.008):
+        self.s_offset = s_offset;
+
+    def get(self, noise_steps):
+        f = lambda t: torch.cos((t/noise_steps + self.s_offset) / (1+self.s_offset) * torch.pi/2.)**2
+        f_t = f(torch.arange(noise_steps))
+        f_0 = f(torch.zeros(1))
+        alpha_hat = f_t / f_0
+        beta = torch.clip(alpha_hat, max=0.999)
+        alpha = 1. - beta
+        return beta, alpha, alpha_hat
+
+
+class Diffusion:
+    def __init__(self, variance_scheduler=None, noise_steps=1000, img_size=64, device="cpu"):
+        self.noise_steps = noise_steps
         self.img_size = img_size
         self.device = device
 
-        self.beta = self.prepare_noise_schedule().to(device)
-        self.alpha = 1. - self.beta
-        self.alpha_hat = torch.cumprod(self.alpha, dim=0)
+        if not variance_scheduler:
+            variance_scheduler = Cosine_variance_scheduler()
 
-    def prepare_noise_schedule(self):
-        return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
+        self.beta, self.alpha, self.alpha_hat = variance_scheduler.get(noise_steps)
 
     def noise_images(self, x, t):
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
         sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None, None, None]
-        eps = torch.randn_like(x)
-        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * eps, eps
+        epsilon = torch.randn_like(x)
+        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * epsilon, epsilon
 
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
@@ -262,25 +289,21 @@ class Diffusion:
 
 
 class Diffusion_conditional:
-    def __init__(self, noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=64, device="cpu"):
+    def __init__(self, variance_scheduler=None, noise_steps=1000, img_size=64, device="cpu"):
         self.noise_steps = noise_steps
-        self.beta_start = beta_start
-        self.beta_end = beta_end
         self.img_size = img_size
         self.device = device
 
-        self.beta = self.prepare_noise_schedule().to(device)
-        self.alpha = 1. - self.beta
-        self.alpha_hat = torch.cumprod(self.alpha, dim=0)
+        if not variance_scheduler:
+            variance_scheduler = Cosine_variance_scheduler()
 
-    def prepare_noise_schedule(self):
-        return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
+        self.beta, self.alpha, self.alpha_hat = variance_scheduler.get(noise_steps)
 
     def noise_images(self, x, t):
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
         sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None, None, None]
-        eps = torch.randn_like(x)
-        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * eps, eps
+        epsilon = torch.randn_like(x)
+        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * epsilon, epsilon
 
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
