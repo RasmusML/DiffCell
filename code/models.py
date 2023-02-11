@@ -191,26 +191,38 @@ class UNet(nn.Module):
 
 
 class UNet_conditional(UNet):
-    def __init__(self, c_in=3, c_out=3, time_dim=256, n_classes=None):
+    def __init__(self, n_classes, c_in=3, c_out=3, time_dim=256, hidden_units=5):
         super().__init__(c_in, c_out, time_dim)
 
-        if n_classes is not None:
-            self.label_emb = nn.Embedding(n_classes, time_dim)
+        self.label_emb = nn.Embedding(n_classes, time_dim)
 
-    def forward(self, x, t, y=None):
+        self.linear = nn.Sequential(
+                nn.Linear(1, hidden_units),
+                nn.Tanh(),
+                nn.Linear(hidden_units, 1))
+
+    def forward(self, x, t, y_labels=None, y_regression=None):
         t = t.unsqueeze(-1)
         t = self.pos_encoding(t, self.time_dim)
 
-        if y is not None:
-            t += self.label_emb(y)
+        if y_labels is not None:
+            t += self.label_emb(y_labels)
+
+        if y_regression is not None:
+            t += self.linear(y_regression[:,None])
 
         return self.unet_forward(x, t)
 
 
 class Linear_variance_scheduler:
-    """
+    r"""
+
+    References
+    ----------
         https://arxiv.org/pdf/2006.11239.pdf
+
     """
+
     def __init__(self, beta_start=1e-4, beta_end=0.02):
         self.beta_start = beta_start
         self.beta_end = beta_end
@@ -223,8 +235,12 @@ class Linear_variance_scheduler:
 
 
 class Cosine_variance_scheduler:
-    """
+    r"""
+
+    References
+    ----------
         https://arxiv.org/pdf/2102.09672.pdf
+
     """
     def __init__(self, s_offset=0.008):
         self.s_offset = s_offset;
@@ -289,6 +305,9 @@ class Diffusion:
 
 
 class Diffusion_conditional:
+    """
+        Classifier-Free Guidance
+    """
     def __init__(self, variance_scheduler=None, noise_steps=1000, img_size=64, device="cpu"):
         self.noise_steps = noise_steps
         self.img_size = img_size
@@ -423,8 +442,8 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     n_classes = len(get_all_MOA_types())
+    model = UNet_conditional(n_classes).to(device)
 
-    model = UNet_conditional(n_classes=n_classes).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr)
     mse = nn.MSELoss()
     diffusion = Diffusion_conditional(img_size=image_size, noise_steps=1000, device=device)
@@ -441,7 +460,8 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
             concentrations = concentrations.to(device)
             moa = moa.to(device)
 
-            labels = moa # @TODO: include concentration (log-scale?)
+            labels = moa
+            y_regr = concentrations # @TODO: sqrt?
 
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
@@ -449,7 +469,7 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
             if np.random.random() < 0.1:
                 labels = None
 
-            predicted_noise = model(x_t, t, labels)
+            predicted_noise = model(x_t, t, labels, y_regr)
             loss = mse(noise, predicted_noise)
 
             optimizer.zero_grad()
