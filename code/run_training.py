@@ -1,3 +1,7 @@
+"""
+Train a diffusion model and write sample images to jpg and npy files.
+"""
+
 from dataset import *
 from plots import *
 from utils import *
@@ -7,9 +11,9 @@ import argparse
 import logging
 
 def main(args):
-    fix_seed()
-
     logging.basicConfig(format="%(asctime)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
+
+    fix_seed()
 
     logging.info("loading data")
     is_local = not args.server
@@ -35,17 +39,11 @@ def main(args):
         train_conditional_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-            prog = 'diffusion model training script',
-            description = 'Script to train a diffusion model')
-
-    parser.add_argument("--server", action="store_true")
-    parser.set_defaults(server=False)
-
-    parser.add_argument("--unconditional", action="store_true")
-    parser.set_defaults(unconditional=False)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--server", type=bool, default=False)
+    parser.add_argument("--unconditional", type=bool, default=False)
 
     args = parser.parse_args()
- 
+
     main(args)

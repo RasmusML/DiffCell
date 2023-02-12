@@ -213,7 +213,6 @@ class UNet_conditional(UNet):
 
         return self.unet_forward(x, t)
 
-
 class Linear_variance_scheduler:
     r"""
 
@@ -250,7 +249,8 @@ class Cosine_variance_scheduler:
         f_t = f(torch.arange(noise_steps))
         f_0 = f(torch.zeros(1))
         alpha_hat = f_t / f_0
-        beta = torch.clip(alpha_hat, max=0.999)
+        alpha_hat_left_shift = torch.tensor([1, *alpha_hat[:-1]])
+        beta = torch.clip(1 - alpha_hat / alpha_hat_left_shift, max=0.999)
         alpha = 1. - beta
         return beta, alpha, alpha_hat
 
@@ -447,7 +447,10 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     n_classes = len(get_all_MOA_types())
-    regression_labels = torch.tensor(get_all_concentration_types())
+
+    concentration_types = torch.tensor(get_all_concentration_types())
+    regression_labels = (concentration_types - concentration_types.mean()) / concentration_types.std()
+
     model = UNet_conditional(n_classes).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=lr)
