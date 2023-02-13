@@ -41,8 +41,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--server", type=bool, default=False)
-    parser.add_argument("--unconditional", type=bool, default=False)
+    parser.add_argument("--server", default=False, action="store_true")
+    parser.add_argument("--unconditional", default=False, action="store_true")
 
     args = parser.parse_args()
 

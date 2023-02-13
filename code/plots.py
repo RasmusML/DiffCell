@@ -182,3 +182,47 @@ def plot_images(images: torch.Tensor, title=None, path=None):
         plt.show()
 
 
+def plot_treatment_classifier_loss(training_data, path=None):
+    train_loss = np.array(training_data["train_loss"])
+    validation_loss = np.array(training_data["validation_loss"])
+
+    fig, ax = plt.subplots()
+    ax.set_title("Treatment Classifier | Loss")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.plot(train_loss[:,0], train_loss[:,1], label="Total Loss", linewidth=2., color="blue")
+    ax.plot(train_loss[:,0], train_loss[:,2], label="MOA Loss", linestyle="dashed", color="blue")
+    ax.plot(train_loss[:,0], train_loss[:,3], label="Concentration Loss (MSE)", linestyle="dotted", color="blue")
+
+    ax.plot(validation_loss[:,0], validation_loss[:,1], label="Total Loss", linewidth=2., color="orange")
+    ax.plot(validation_loss[:,0], validation_loss[:,2], label="MOA Loss", linestyle="dashed", color="orange")
+    ax.plot(validation_loss[:,0], validation_loss[:,3], label="Concentration Loss (MSE)", linestyle="dotted", color="orange")
+
+    ax.legend(loc="upper left")
+    ax.grid()
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
+def plot_treatment_classifier_accuracy(training_data, path=None):
+    train_accuracy = np.array(training_data["train_accuracy"])
+    validation_accuracy = np.array(training_data["validation_accuracy"])
+
+    fig, ax = plt.subplots()
+    ax.set_title("Treatment Classifier | Accuracy")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Accuracy (%)")
+    ax.plot(train_accuracy[:,0], train_accuracy[:,1] * 100, label="Train", linewidth=2., color="blue")
+    ax.plot(validation_accuracy[:,0], validation_accuracy[:,1] * 100, label="Test", linewidth=2., color="orange")
+
+    ax.legend(loc="upper left")
+    ax.grid()
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
+

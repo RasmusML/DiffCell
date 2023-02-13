@@ -34,6 +34,18 @@ def one_param(m):
     return next(iter(m.parameters()))
 
 
+class PrintSize(nn.Module):
+    """Utility module to print current shape of a Tensor in Sequential, only at the first pass."""
+    
+    first = True
+
+    def forward(self, x):
+        if self.first:
+            print(f"Size: {x.size()}. ")
+            self.first = False
+        return x
+
+
 class SelfAttention(nn.Module):
     def __init__(self, channels):
         super().__init__()
@@ -209,7 +221,7 @@ class UNet_conditional(UNet):
             t += self.label_emb(y_labels)
 
         if y_regression is not None:
-            t += self.linear(y_regression[:,None])
+            t += self.linear(y_regression)
 
         return self.unet_forward(x, t)
 
@@ -381,7 +393,7 @@ def prepare_dataset_for_training(metadata: pd.DataFrame, images: torch.Tensor) -
     moa_to_id, id_to_moa = get_MOA_mappings()
     moa = torch.from_numpy(np.array([moa_to_id[m] for m in metadata["moa"]]))
     concentrations = torch.from_numpy(np.array(metadata["Image_Metadata_Concentration"], dtype=np.float32))
-    dataset = TensorDataset(images, concentrations, moa)
+    dataset = TensorDataset(images, concentrations[:,None], moa)
     return dataset
 
 
