@@ -9,6 +9,7 @@ import logging
 from plots import *
 from dataset import *
 
+
 def main(args):
     logging.basicConfig(format="%(asctime)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 

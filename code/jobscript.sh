@@ -7,4 +7,5 @@
 #BSUB -R "rusage[mem=64GB]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
-python3 code/run_training.py --server
+python3 code/script_train_diffusion.py --server
+#python3 code/script_train_classifier.py --server

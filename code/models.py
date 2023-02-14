@@ -22,7 +22,7 @@ def save_images(images, path, **kwargs):
     im.save(path)
 
 
-def make_folders(run_name):
+def make_result_folders(run_name):
     os.makedirs("models", exist_ok=True)
     os.makedirs("results", exist_ok=True)
     os.makedirs(os.path.join("models", run_name), exist_ok=True)
@@ -207,7 +207,6 @@ class UNet_conditional(UNet):
         super().__init__(c_in, c_out, time_dim)
 
         self.label_emb = nn.Embedding(n_classes, time_dim)
-
         self.linear = nn.Linear(1, 1)
 
     def forward(self, x, t, y_labels=None, y_regression=None):
@@ -251,7 +250,7 @@ class Cosine_variance_scheduler:
 
     """
     def __init__(self, s_offset=0.008, singularities_clip=0.02):
-        self.s_offset = s_offset;
+        self.s_offset = s_offset
         self.singularities_clip = singularities_clip
 
     def get(self, noise_steps):
@@ -312,7 +311,6 @@ class Diffusion:
 
         model.train()
         x = (x.clamp(-1, 1) + 1) / 2
-        x = (x * 255).type(torch.uint8)
 
         return x
 
@@ -370,7 +368,6 @@ class Diffusion_conditional:
 
             model.train()
             x = (x.clamp(-1, 1) + 1) / 2
-            x = (x * 255).type(torch.uint8)
 
             return x
 
@@ -397,26 +394,16 @@ def indexify(concentrations):
     return np.array([mapping[(c)] for c in concentrations])
 
 
-def prepare_dataset_for_training(metadata: pd.DataFrame, images: torch.Tensor) -> TensorDataset:
-    moa_to_id, id_to_moa = get_MOA_mappings()
-    moa = torch.from_numpy(np.array([moa_to_id[m] for m in metadata["moa"]]))
-    concentrations = metadata["Image_Metadata_Concentration"]
-    concentrations = torch.from_numpy(np.array(concentrations, dtype=np.float32))
-    dataset = TensorDataset(images, concentrations[:,None], moa)
-    return dataset
-
-
 def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Unconditional"
-    make_folders(run_name)
+    make_result_folders(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
     
-    dataset = prepare_dataset_for_training(metadata, images)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = DataLoader(images, batch_size=batch_size, shuffle=True)
 
     model = UNet().to(device)
     optimizer = optim.AdamW(model.parameters(), lr=lr)
@@ -430,7 +417,7 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
         logging.info(f"Starting epoch {epoch}:")
 
         pbar = tqdm(dataloader)
-        for i, (images, _, _) in enumerate(pbar):
+        for i, images in enumerate(pbar):
             images = images.to(device)
 
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
@@ -449,30 +436,47 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
 
             sampled_images = diffusion.sample(model, N_images=images.shape[0])
 
-            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.cpu().numpy() / 255.0)
-            save_images(sampled_images, os.path.join("results", run_name, f"{epoch}.jpg"))
+            epoch_save_dir = os.path.join("results", run_name)
+            np.save(os.path.join(epoch_save_dir, f"{epoch}.npy"), sampled_images.cpu().numpy())
+            save_images(sampled_images, os.path.join(epoch_save_dir, f"{epoch}.jpg"))
     
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
+
+
+def log_transform(x: torch.Tensor) -> torch.Tensor:
+    return torch.log(x + 1.0)
 
 
 def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Conditional"
-    make_folders(run_name)
+    make_result_folders(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
-    
-    dataset = prepare_dataset_for_training(metadata, images)
+
+    # prepare dataset
+    concentration_transform = log_transform
+
+    concentrations = torch.tensor(np.array(metadata["Image_Metadata_Concentration"], dtype=np.float32))
+    concentrations = concentration_transform(concentrations)
+    concentration_mean, concentration_std = concentrations.mean(), concentrations.std()
+    concentrations = (concentrations - concentration_mean) / concentration_std
+
+    moa_to_id, _ = get_MOA_mappings()
+    moa = torch.from_numpy(np.array([moa_to_id[m] for m in metadata["moa"]]))
+
+    dataset = TensorDataset(images, concentrations[:,None], moa)
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-    n_classes = len(get_all_MOA_types())
-
+    # used for random sampling
     concentration_types = torch.tensor(get_all_concentration_types())
-    concentration_types = torch.log(concentration_types + 1.)
-    regression_labels = (concentration_types - concentration_types.mean()) / concentration_types.std()
+    concentration_types = concentration_transform(concentration_types)
+    regression_labels = (concentration_types - concentration_mean) / concentration_std
 
+    # setup model and parameters
+    n_classes = len(get_all_MOA_types())
     model = UNet_conditional(n_classes).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=lr)
@@ -519,8 +523,9 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
 
             sampled_images = diffusion.sample(model, N_images=len(labels), labels=labels, y_regr=y_regr)
 
-            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.cpu().numpy() / 255.0)
-            save_images(sampled_images, os.path.join("results", run_name, f"{epoch}.jpg"))
+            epoch_save_dir = os.path.join("results", run_name)
+            np.save(os.path.join(epoch_save_dir, f"{epoch}.npy"), sampled_images.cpu().numpy())
+            save_images(sampled_images, os.path.join(epoch_save_dir, f"{epoch}.jpg"))
     
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
 

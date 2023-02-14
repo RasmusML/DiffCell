@@ -79,33 +79,33 @@ def _get_relative_image_path(row: pd.Series) -> str:
 
 
 # --- Image normalization ---
-def normalize(images: torch.Tensor) -> torch.Tensor:
+def normalize_image(images: torch.Tensor) -> torch.Tensor:
     max_value_per_image, _ = images.flatten(start_dim=1).max(dim=1)
     img_tmp = images.flatten(start_dim=1) / max_value_per_image[:,None].expand(-1, 3*68*68)
     return img_tmp.reshape(images.shape)
 
 
-def normalize_channel_wise(images: torch.Tensor) -> torch.Tensor:
+def normalize_image_channel_wise(images: torch.Tensor) -> torch.Tensor:
     max_values, _ = images.flatten(start_dim=2).max(dim=2)
     img_tmp = images.flatten(start_dim=2) / max_values[:,:,None].expand(-1, 3, 68*68)
     return img_tmp.reshape(images.shape)
 
 
-def normalize_constant(images: torch.Tensor) -> torch.Tensor:
+def normalize_image_by_constant(images: torch.Tensor) -> torch.Tensor:
     return images / 40_000
 
 
-def normalized_to_zscore(images: torch.Tensor) -> torch.Tensor:
+def normalized_to_pseudo_zscore(images: torch.Tensor) -> torch.Tensor:
     """ [0,1] -> [-1,1] """
     return 2 * images.clamp(0, 1) - 1
 
 
-def zscore_to_normalized(images: torch.Tensor) -> torch.Tensor:
+def pseudo_zscore_to_normalized(images: torch.Tensor) -> torch.Tensor:
     """ [-1,1] -> [0,1]"""
     return (images.clamp(-1,1) + 1) / 2
 
 
-def view_cropped_images(images: torch.Tensor) -> torch.Tensor:
+def crop_images(images: torch.Tensor) -> torch.Tensor:
     return images[:,:,2:-2,2:-2]
 
 

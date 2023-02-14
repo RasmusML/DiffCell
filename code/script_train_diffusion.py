@@ -27,11 +27,11 @@ def main(args):
     logging.info("loading images")
     images = load_images_from_metadata(train_metadata, is_local)
 
-    images = normalize_channel_wise(images)
-    images = normalized_to_zscore(images)
+    images = normalize_image_channel_wise(images)
+    images = normalized_to_pseudo_zscore(images)
 
     logging.info("training")
-    cropped_images = view_cropped_images(images)
+    cropped_images = crop_images(images)
 
     if args.unconditional:
         train_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
