@@ -21,7 +21,7 @@ def main(args):
 
     blacklist = []
     validation_metadata = stratify_metadata(metadata, 20, blacklist=blacklist)
-    train_metadata = stratify_metadata(metadata, 100, blacklist=blacklist).drop(validation_metadata.index, errors="ignore")
+    train_metadata = stratify_metadata(metadata, 300, blacklist=blacklist).drop(validation_metadata.index, errors="ignore")
 
     _train_images = load_images_from_metadata(train_metadata)
     _train_images = normalize_image_channel_wise(_train_images)
