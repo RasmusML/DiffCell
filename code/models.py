@@ -203,15 +203,12 @@ class UNet(nn.Module):
 
 
 class UNet_conditional(UNet):
-    def __init__(self, n_classes, c_in=3, c_out=3, time_dim=256, hidden_units=5):
+    def __init__(self, n_classes, c_in=3, c_out=3, time_dim=256):
         super().__init__(c_in, c_out, time_dim)
 
         self.label_emb = nn.Embedding(n_classes, time_dim)
 
-        self.linear = nn.Sequential(
-                nn.Linear(1, hidden_units),
-                nn.Tanh(),
-                nn.Linear(hidden_units, 1))
+        self.linear = nn.Linear(1, 1)
 
     def forward(self, x, t, y_labels=None, y_regression=None):
         t = t.unsqueeze(-1)
@@ -253,8 +250,9 @@ class Cosine_variance_scheduler:
         https://arxiv.org/pdf/2102.09672.pdf
 
     """
-    def __init__(self, s_offset=0.008):
+    def __init__(self, s_offset=0.008, singularities_clip=0.02):
         self.s_offset = s_offset;
+        self.singularities_clip = singularities_clip
 
     def get(self, noise_steps):
         f = lambda t: torch.cos((t/noise_steps + self.s_offset) / (1+self.s_offset) * torch.pi/2.)**2
@@ -262,7 +260,7 @@ class Cosine_variance_scheduler:
         f_0 = f(torch.zeros(1))
         alpha_hat = f_t / f_0
         alpha_hat_left_shift = torch.tensor([1, *alpha_hat[:-1]])
-        beta = torch.clip(1 - alpha_hat / alpha_hat_left_shift, max=0.999)
+        beta = torch.clip(1 - alpha_hat / alpha_hat_left_shift, max=self.singularities_clip)
         alpha = 1. - beta
         return beta, alpha, alpha_hat
 
@@ -389,10 +387,21 @@ def get_MOA_mappings():
     return moa_to_id, id_to_moa
 
 
+def indexify(concentrations):
+    all_concentrations = get_all_concentration_types()
+    mapping = {}
+    
+    for i, c in enumerate(all_concentrations):
+        mapping[(c)] = i
+        
+    return np.array([mapping[(c)] for c in concentrations])
+
+
 def prepare_dataset_for_training(metadata: pd.DataFrame, images: torch.Tensor) -> TensorDataset:
     moa_to_id, id_to_moa = get_MOA_mappings()
     moa = torch.from_numpy(np.array([moa_to_id[m] for m in metadata["moa"]]))
-    concentrations = torch.from_numpy(np.array(metadata["Image_Metadata_Concentration"], dtype=np.float32))
+    concentrations = metadata["Image_Metadata_Concentration"]
+    concentrations = torch.from_numpy(np.array(concentrations, dtype=np.float32))
     dataset = TensorDataset(images, concentrations[:,None], moa)
     return dataset
 
@@ -415,9 +424,9 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
     diffusion = Diffusion(img_size=image_size, noise_steps=1000, device=device)
 
     k = 0
-    epoch_sample_points = torch.linspace(0, epochs-1, epoch_sample_times, dtype=torch.int32)
+    epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
     
-    for epoch in range(epochs):
+    for epoch in range(1, epochs+1):
         logging.info(f"Starting epoch {epoch}:")
 
         pbar = tqdm(dataloader)
@@ -440,10 +449,10 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
 
             sampled_images = diffusion.sample(model, N_images=images.shape[0])
 
-            np.save(os.path.join("results", run_name, f"{epoch + 1}.npy"), sampled_images.cpu().numpy() / 255.0)
-            save_images(sampled_images, os.path.join("results", run_name, f"{epoch + 1}.jpg"))
+            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.cpu().numpy() / 255.0)
+            save_images(sampled_images, os.path.join("results", run_name, f"{epoch}.jpg"))
     
-            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch + 1}.pt"))
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
 
 
 def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
@@ -461,6 +470,7 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
     n_classes = len(get_all_MOA_types())
 
     concentration_types = torch.tensor(get_all_concentration_types())
+    concentration_types = torch.log(concentration_types + 1.)
     regression_labels = (concentration_types - concentration_types.mean()) / concentration_types.std()
 
     model = UNet_conditional(n_classes).to(device)
@@ -470,9 +480,9 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
     diffusion = Diffusion_conditional(img_size=image_size, noise_steps=1000, device=device)
 
     k = 0
-    epoch_sample_points = torch.linspace(0, epochs-1, epoch_sample_times, dtype=torch.int32)
+    epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
     
-    for epoch in range(epochs):
+    for epoch in range(1, epochs+1):
         logging.info(f"Starting epoch {epoch}:")
 
         pbar = tqdm(dataloader)
@@ -482,7 +492,7 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
             moa = moa.to(device)
 
             labels = moa
-            y_regr = concentrations # @TODO: sqrt?
+            y_regr = concentrations
 
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
@@ -504,15 +514,13 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
 
             labels = torch.arange(n_classes).long().to(device)
 
-            random_concentrations = regression_labels[torch.randint(high=n_classes, size=(n_classes,))]
+            random_concentrations = regression_labels[torch.randint(high=n_classes, size=(n_classes,1))]
             y_regr = random_concentrations.clone().float().to(device)
 
             sampled_images = diffusion.sample(model, N_images=len(labels), labels=labels, y_regr=y_regr)
 
-            logging.info("sampling done")
-
-            np.save(os.path.join("results", run_name, f"{epoch + 1}.npy"), sampled_images.cpu().numpy() / 255.0)
-            save_images(sampled_images, os.path.join("results", run_name, f"{epoch + 1}.jpg"))
+            np.save(os.path.join("results", run_name, f"{epoch}.npy"), sampled_images.cpu().numpy() / 255.0)
+            save_images(sampled_images, os.path.join("results", run_name, f"{epoch}.jpg"))
     
-            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch + 1}.pt"))
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
 
