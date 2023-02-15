@@ -36,7 +36,7 @@ def main(args):
     if args.model == "both":
         train_classifier(train_metadata, train_images, validation_metadata, validation_images)
     elif args.model == "moa":
-        train_moa(train_metadata, train_images, validation_metadata, validation_images)
+        train_MOA_classifier(train_metadata, train_images, validation_metadata, validation_images)
     elif args.model == "concentration":
         logging.info("not implemented yet")
 

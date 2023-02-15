@@ -776,13 +776,13 @@ def train_MOA_classifier(train_metadata, train_images, validation_metadata, vali
     validation_moa = torch.from_numpy(np.array([moa_to_id[m] for m in validation_metadata["moa"]]))
 
     validation_dataset = TensorDataset(validation_images, validation_moa)
-    validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=True)
+    validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False)
 
     training_result = {}
     
     moa_loss = nn.CrossEntropyLoss()
     
-    model = MOA_classifier()
+    model = MOA_classifier().to(device)
     
     training_result["train_loss"] = []      # (epoch, loss)
     training_result["validation_loss"] = [] # (epoch, loss)
@@ -815,7 +815,7 @@ def train_MOA_classifier(train_metadata, train_images, validation_metadata, vali
             
             train_batch_loss.append(loss.detach().cpu())
             
-            accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).numpy() / len(images)
+            accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).cpu().numpy() / len(images)
             train_batch_accuracy.append(accuracy)     
                 
             pbar.set_postfix(loss=loss.item())
@@ -842,7 +842,7 @@ def train_MOA_classifier(train_metadata, train_images, validation_metadata, vali
                     
                     validation_batch_loss.append(loss.detach().cpu())
                
-                    accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).numpy() / len(images)
+                    accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).cpu().numpy() / len(images)
                     validation_batch_accuracy.append(accuracy)     
             
                 training_result["validation_loss"].append((epoch, np.mean(np.array(validation_batch_loss))))
@@ -851,5 +851,9 @@ def train_MOA_classifier(train_metadata, train_images, validation_metadata, vali
                 model.train()
             
             # store latest model and performance
-            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
             save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
+
+    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+
+

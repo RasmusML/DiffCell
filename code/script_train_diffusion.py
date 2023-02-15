@@ -33,10 +33,14 @@ def main(args):
     logging.info("training")
     cropped_images = crop_images(images)
 
+    batch_size = 32
+    epochs = 600
+    epoch_sample_times = 15
+
     if args.unconditional:
-        train_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
+        train_diffusion_model(train_metadata, cropped_images, epochs = epochs, batch_size = batch_size, epoch_sample_times = epoch_sample_times)
     else:
-        train_conditional_diffusion_model(train_metadata, cropped_images, epochs=600, batch_size=6, epoch_sample_times=15)
+        train_conditional_diffusion_model(train_metadata, cropped_images, epochs = epochs, batch_size = batch_size, epoch_sample_times = epoch_sample_times)
 
 
 if __name__ == "__main__":
