@@ -14,6 +14,7 @@ import pandas as pd
 from PIL import Image
 
 from dataset import get_all_MOA_types, get_all_concentration_types
+from utils import *
 
 def save_images(images, path, **kwargs):
     grid = torchvision.utils.make_grid(images, **kwargs)
@@ -523,12 +524,17 @@ def train_conditional_diffusion_model(metadata, images, image_size=64, epochs=10
 
             sampled_images = diffusion.sample(model, N_images=len(labels), labels=labels, y_regr=y_regr)
 
+            logging.info(f"saving results for epoch {epoch}")
+
             epoch_save_dir = os.path.join("results", run_name)
             np.save(os.path.join(epoch_save_dir, f"{epoch}.npy"), sampled_images.cpu().numpy())
             #save_images(sampled_images, os.path.join(epoch_save_dir, f"{epoch}.jpg"))
-    
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
 
+
+#
+# Treatment classification
+#
 
 class Treatment_classifier(nn.Module): 
     def __init__(self, c_in=3, N_moas=13):
@@ -647,7 +653,7 @@ def train_classifier(train_metadata, train_images, validation_metadata, validati
 
             optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm(model.parameters(), 1_000)
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 1_000)
             optimizer.step()
             
             train_batch_loss.append((loss.detach().cpu(), moa_loss_value.detach().cpu(), concentration_loss_value.detach().cpu()))
@@ -695,5 +701,155 @@ def train_classifier(train_metadata, train_images, validation_metadata, validati
 
                 model.train()
             
-    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
-    save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
+            # store latest model and performance
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+            save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
+
+
+#
+# Seperate predictor models
+#
+
+# MOA classifier
+class MOA_classifier(nn.Module): 
+    def __init__(self, c_in=3, N_moas=13):
+        super().__init__()
+        
+        self.bulk = nn.Sequential(
+            nn.Conv2d(in_channels=c_in, out_channels=32, kernel_size=5, padding=2),
+            # 64h * 64w * 32ch
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+
+            # 32h * 32w * 32ch
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, padding=0),
+            # 28h * 28w * 32ch
+            nn.MaxPool2d(2),
+            # 14h * 14w * 32ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, padding=0),
+            # 10h * 10w * 32ch
+            nn.MaxPool2d(2),
+            # 5h * 5w * 32ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+
+            #  5h * 5w * 32ch
+            nn.Conv2d(in_channels=32, out_channels=2*256, kernel_size=5, padding=0),
+            # 1h * 1w * 512ch
+            nn.BatchNorm2d(2*256),
+            nn.Flatten()
+        )
+        
+        bulk_outs = 2*256
+        
+        self.moa_out = nn.Sequential(
+            nn.Linear(bulk_outs, 16),
+            nn.Tanh(),
+            nn.Linear(16, N_moas))
+        
+    def forward(self, images):
+        x = self.bulk(images)
+        y_moa = self.moa_out(x)
+        return y_moa
+
+
+def train_MOA_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.01, epochs=50, batch_size=32, epoch_sample_times=10):
+    run_name = "MOA_Classifier"
+    make_result_folders(run_name)
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logging.info(f"Using device: {device}")
+    
+    # prepare train dataset
+    moa_to_id, _ = get_MOA_mappings()
+    train_moa = torch.from_numpy(np.array([moa_to_id[m] for m in train_metadata["moa"]]))
+
+    train_dataset = TensorDataset(train_images, train_moa)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # prepare validation set
+    moa_to_id, _ = get_MOA_mappings()
+    validation_moa = torch.from_numpy(np.array([moa_to_id[m] for m in validation_metadata["moa"]]))
+
+    validation_dataset = TensorDataset(validation_images, validation_moa)
+    validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=True)
+
+    training_result = {}
+    
+    moa_loss = nn.CrossEntropyLoss()
+    
+    model = MOA_classifier()
+    
+    training_result["train_loss"] = []      # (epoch, loss)
+    training_result["validation_loss"] = [] # (epoch, loss)
+    training_result["train_accuracy"] = []      # (epoch, accuracy)
+    training_result["validation_accuracy"] = [] # (epoch, accuracy)
+    
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=1e-5)
+    
+    k = 0
+    epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
+    
+    for epoch in range(1, epochs+1):
+        logging.info(f"Starting epoch {epoch}:")
+        
+        train_batch_loss = []
+        train_batch_accuracy = []
+
+        pbar = tqdm(train_dataloader)
+        for i, (images, target_moa) in enumerate(pbar):
+            images = images.to(device)
+            target_moa = target_moa.to(device)
+
+            pred_moa = model(images)
+            loss = moa_loss(pred_moa, target_moa)
+
+            optimizer.zero_grad()
+            loss.backward()
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 1_000)
+            optimizer.step()
+            
+            train_batch_loss.append(loss.detach().cpu())
+            
+            accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).numpy() / len(images)
+            train_batch_accuracy.append(accuracy)     
+                
+            pbar.set_postfix(loss=loss.item())
+
+        # store training loss
+        training_result["train_loss"].append((epoch, np.mean(np.array(train_batch_loss))))
+        training_result["train_accuracy"].append((epoch, np.mean(np.array(train_batch_accuracy))))
+        
+        if epoch == epoch_sample_points[k]:
+            k += 1
+            
+            with torch.no_grad():
+                model.eval()
+                
+                validation_batch_loss = []
+                validation_batch_accuracy = []
+        
+                for i, (images, target_moa) in enumerate(validation_dataloader):
+                    images = images.to(device)
+                    target_moa = target_moa.to(device)
+
+                    pred_moa = model(images)
+                    loss = moa_loss(pred_moa, target_moa)
+                    
+                    validation_batch_loss.append(loss.detach().cpu())
+               
+                    accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).numpy() / len(images)
+                    validation_batch_accuracy.append(accuracy)     
+            
+                training_result["validation_loss"].append((epoch, np.mean(np.array(validation_batch_loss))))
+                training_result["validation_accuracy"].append((epoch, np.mean(np.array(validation_batch_accuracy))))
+
+                model.train()
+            
+            # store latest model and performance
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+            save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
