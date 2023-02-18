@@ -9,6 +9,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
+from collections import defaultdict
+
+from typing import List, Set, Dict, Tuple, Optional, Any
+
 import numpy as np
 import pandas as pd
 from PIL import Image
@@ -856,4 +860,198 @@ def train_MOA_classifier(train_metadata, train_images, validation_metadata, vali
 
     torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
 
+#
+# VAE
+#
 
+
+class CytoVariationalAutoencoder(nn.Module):
+ 
+    def __init__(self, input_shape, latent_features: int):
+        super(CytoVariationalAutoencoder, self).__init__()
+        
+        self.input_shape = input_shape
+        self.latent_features = latent_features
+        self.observation_features = np.prod(input_shape)
+        self.observation_shape = input_shape
+        self.input_channels = input_shape[0]
+        
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels=self.input_channels, out_channels=32, kernel_size=5, padding=2),
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, padding=0),
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, padding=0),
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+
+            nn.Conv2d(in_channels=32, out_channels=2*self.latent_features, kernel_size=5, padding=0),
+            nn.BatchNorm2d(2*self.latent_features),
+            nn.Flatten()
+        )
+
+        
+        self.decoder = nn.Sequential(
+            nn.Unflatten(1, (self.latent_features,1,1)),
+            nn.Conv2d(in_channels=self.latent_features, out_channels=32, kernel_size=5, padding=4),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(negative_slope=0.01),
+            torch.nn.UpsamplingNearest2d(size=10),
+
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, padding=4),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(negative_slope=0.01),
+            torch.nn.UpsamplingNearest2d(size=28),
+
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, padding=4),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(negative_slope=0.01),
+            torch.nn.UpsamplingNearest2d(size=64),
+
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=5, padding=2),
+            nn.BatchNorm2d(32),
+            nn.LeakyReLU(negative_slope=0.01),
+            
+            nn.Conv2d(in_channels=32, out_channels=3, kernel_size=1, padding=0),
+            nn.BatchNorm2d(3),
+            nn.LeakyReLU(negative_slope=0.01)
+        )
+        
+    def observation(self, z:torch.Tensor) -> torch.Tensor:
+        mu = self.decoder(z)
+        mu = mu.view(-1, *self.input_shape)
+        return mu
+
+    def forward(self, x) -> Dict[str, Any]:
+        h_z = self.encoder(x)
+        qz_mu, qz_log_sigma =  h_z.chunk(2, dim=-1)        
+        eps = torch.empty_like(qz_mu).normal_()
+        z = qz_mu + qz_log_sigma.exp() * eps
+        
+        x_hat = self.observation(z)
+        
+        return {'x_hat': x_hat, 'qz_log_sigma': qz_log_sigma, 'qz_mu': qz_mu, 'z': z}    
+
+
+
+class VariationalInference_VAE(nn.Module):
+    
+    def __init__(self, beta:float=1., p_norm = 2.):
+        super().__init__()
+        self.beta = beta
+        self.p_norm = float(p_norm)
+
+    def forward(self, model: nn.Module, x: torch.Tensor) -> Tuple[torch.Tensor, Dict, torch.Tensor]:
+        outputs = model(x)
+
+        # Unpack values from VAE
+        x_hat, qz_log_sigma, qz_mu, z = [outputs[k] for k in ["x_hat", "qz_log_sigma", "qz_mu", "z"]]
+        qz_sigma = qz_log_sigma.exp()
+        # Imagewise loss. Calculated as the p-norm distance in pixel-space between original and reconstructed image
+        image_loss = ((x_hat - x).abs()**self.p_norm).sum(axis=[1,2,3])
+
+        # KL-divergence calculated explicitly
+        # Reference Kingma & Welling p. 5 bottom
+        kl = - (.5 * (1 + (qz_sigma ** 2).log() - qz_mu ** 2 - qz_sigma**2)).sum(axis=[1])
+
+        # Image-wise beta-elbo:
+        beta_elbo = -image_loss - self.beta * kl
+
+        # Loss is the mean of the imagewise losses, over the full batch of images
+        loss = -beta_elbo.mean()
+        
+        # prepare the output
+        with torch.no_grad():
+            diagnostics = {'elbo': beta_elbo, 'image_loss': image_loss, 'kl': kl}
+            
+        return loss, diagnostics, outputs
+      
+
+
+import torch, torch.nn as nn
+import numpy as np
+
+def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3, weight_decay=1e-4, epoch_sample_times=10):
+    run_name = "VAE_predictor"
+    make_result_folders(run_name)
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logging.info(f"Using device: {device}")
+    
+    vae = CytoVariationalAutoencoder(input_shape=np.array([3, 64, 64]), latent_features=256).to(device)
+    vi = VariationalInference_VAE().to(device)
+    
+    optimizer = torch.optim.Adam(vae.parameters(), lr=lr, weight_decay=weight_decay)
+    
+    # prepare dataset loader
+    train_dataloader = DataLoader(training_data, batch_size=batch_size, shuffle=True)
+    validation_dataloader = DataLoader(validation_data, batch_size=batch_size, shuffle=False)
+
+    training_result = {}
+    training_result["train_loss"] = []      # (elbo, image loss, kl)
+    training_result["validation_loss"] = [] # (elbo, image loss, kl)
+    
+    sample_index = 0
+    epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
+    
+    for epoch in range(1, epochs+1):
+        logging.info(f"Starting epoch {epoch}:")
+        
+        training_epoch_data = defaultdict(list)
+        vae.train()
+        
+        for x in train_dataloader:
+            x = x.to(device)
+
+            loss, diagnostics, outputs = vi(vae, x)
+            
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(vae.parameters(), 10_000)
+            optimizer.step()
+            
+            for k, v in diagnostics.items():
+                training_epoch_data[k] += list(v.cpu().data.numpy())
+        
+        training_data = {}
+        for k, v in training_epoch_data.items():
+            training_data[k] = np.mean(training_epoch_data[k])
+        
+        print(training_data)
+        training_result["train_loss"].append(training_data)
+        print(training_result)
+        
+            
+        with torch.no_grad():
+            vae.eval()
+            
+            validation_epoch_data = defaultdict(list)
+            
+            for x in validation_dataloader:
+                x = x.to(device)
+                
+                loss, diagnostics, outputs = vi(vae, x)
+                
+                for k, v in diagnostics.items():
+                    validation_epoch_data[k] += list(v.cpu().data.numpy())
+            
+            validation_data = {}
+            for k, v in diagnostics.items():
+                validation_data[k] = np.mean(validation_epoch_data[k])
+            
+            training_result["validation_loss"].append(training_data)
+            save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
+
+            if epoch == epoch_sample_points[sample_index]:
+                sample_index += 1
+                
+                torch.save(vae.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
+            
+    #return validation_data, training_data, params, vae
