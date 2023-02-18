@@ -620,7 +620,7 @@ def train_classifier(train_metadata, train_images, validation_metadata, validati
     concentration_loss = nn.MSELoss()
     penalty_concentration = .5
     
-    model = Treatment_classifier()
+    model = Treatment_classifier().to(device)
     
     training_result["penalty_concentration"] = penalty_concentration
     training_result["train_loss"] = []      # (epoch, loss, moa loss, penalty * concentration loss)
@@ -658,7 +658,7 @@ def train_classifier(train_metadata, train_images, validation_metadata, validati
             
             train_batch_loss.append((loss.detach().cpu(), moa_loss_value.detach().cpu(), concentration_loss_value.detach().cpu()))
             
-            accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).numpy() / len(images)
+            accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).cpu().numpy() / len(images)
             train_batch_accuracy.append(accuracy)     
                 
             pbar.set_postfix(loss=loss.item())
@@ -691,7 +691,7 @@ def train_classifier(train_metadata, train_images, validation_metadata, validati
 
                     validation_batch_loss.append((loss.detach().cpu(), moa_loss_value.detach().cpu(), concentration_loss_value.detach().cpu()))
                
-                    accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).numpy() / len(images)
+                    accuracy = (torch.sum(pred_moa.max(1)[1] == target_moa)).cpu().numpy() / len(images)
                     validation_batch_accuracy.append(accuracy)     
             
                 validation_epoch_loss = np.array(validation_batch_loss)
