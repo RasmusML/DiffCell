@@ -32,7 +32,7 @@ def make_result_folders(run_name):
     os.makedirs("results", exist_ok=True)
     os.makedirs(os.path.join("models", run_name), exist_ok=True)
     os.makedirs(os.path.join("results", run_name), exist_ok=True)
-
+    os.makedirs(os.path.join("results", run_name, "training"), exist_ok=True)
 
 def one_param(m):
     "get model first parameter"
@@ -434,6 +434,8 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
 
     run_name = "DDPM_Conditional"
     make_result_folders(run_name)
+
+    train_dir = os.path.join("results", run_name, "training")
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
@@ -498,11 +500,11 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
 
             logging.info(f"saving results for epoch {epoch}")
 
-            epoch_save_dir = os.path.join("results", run_name)
-            np.save(os.path.join(epoch_save_dir, f"{epoch}.npy"), sampled_images.cpu().numpy())
+            np.save(os.path.join(train_dir, f"{epoch}.npy"), sampled_images.cpu().numpy())
             #save_images(sampled_images, os.path.join(epoch_save_dir, f"{epoch}.jpg"))
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
 
+    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
 
 #
 # predictor model
@@ -556,6 +558,8 @@ class Compound_classifier(nn.Module):
 def train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=50, batch_size=64, epoch_sample_times=10):
     run_name = "Compound_Classifier"
     make_result_folders(run_name)
+
+    train_dir = os.path.join("results", run_name, "training")
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
@@ -586,7 +590,7 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
     training_result["validation_accuracy"] = [] # (epoch, accuracy)
     
     optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=1e-5)
-    
+
     k = 0
     epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
     
@@ -649,7 +653,7 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
             # store latest model and performance
             logging.info("saving")
             torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
-            save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
+            save_dict(training_result, os.path.join(train_dir, "train_results.pkl"))  
 
     torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
 

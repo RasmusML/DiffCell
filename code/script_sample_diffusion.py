@@ -39,9 +39,11 @@ def main(args):
 
     compounds = [treatment[0] for treatment in treatments_to_sample]
     compounds = torch.from_numpy(np.array([compound_to_id[c] for c in compounds]))
+    compounds = compounds.to(device)
 
     concentrations = [treatment[1] for treatment in treatments_to_sample]
     concentrations = torch.from_numpy(np.array([concentration_to_id[c] for c in concentrations]))
+    concentrations = concentrations.to(device)
 
     batch_size = args.batch_size
 
@@ -52,6 +54,7 @@ def main(args):
     result_images = np.empty((len(treatments_to_sample), 3, image_size, image_size))
 
     for at in steps:
+        logging.info(f"step {at} / {steps[-1]}")
         end = min(at + batch_size, len(treatments_to_sample))
         compounds_to_sample = compounds[at:end]
         concentrations_to_sample = concentrations[at:end]
