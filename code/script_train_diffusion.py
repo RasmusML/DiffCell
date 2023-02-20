@@ -19,10 +19,13 @@ def main(args):
     is_local = not args.server
     metadata = load_metadata(is_local)
 
-    #train_metadata = metadata[:3000]
-    #train_metadata = stratify_metadata(metadata, 50)
-    blacklist = [("Eg5 inhibitors", 0.1), ("Microtubule destabilizers", 0.3), ("Cholesterol-lowering", 6.0)]
-    train_metadata = stratify_metadata(metadata, 60, blacklist=blacklist)
+    whitelist = get_treatment_whitelist()
+    blacklist = get_treatment_blacklist()
+    selected = [treatment for treatment in whitelist if treatment not in blacklist]
+    train_metadata = stratify_metadata(metadata, 120, whitelist=selected)
+
+    compound_types = list(set([treatment[0] for treatment in whitelist]))
+    concentration_types = list(set([treatment[1] for treatment in whitelist]))
 
     logging.info("loading images")
     images = load_images_from_metadata(train_metadata, is_local)
@@ -40,7 +43,7 @@ def main(args):
     if args.unconditional:
         train_diffusion_model(train_metadata, cropped_images, epochs = epochs, batch_size = batch_size, epoch_sample_times = epoch_sample_times)
     else:
-        train_conditional_diffusion_model(train_metadata, cropped_images, epochs = epochs, batch_size = batch_size, epoch_sample_times = epoch_sample_times)
+        train_conditional_diffusion_model(train_metadata, cropped_images, compound_types, concentration_types, epochs = epochs, batch_size = batch_size, epoch_sample_times = epoch_sample_times)
 
 
 if __name__ == "__main__":

@@ -36,27 +36,17 @@ def load_images_from_metadata(metadata: pd.DataFrame, local_path: bool = True) -
     return torch.from_numpy(images)
 
 
-def stratify_metadata(metadata: pd.DataFrame, images_per_treatment=100, 
-                      whitelist: List[Tuple[str, str]] | None = None, 
-                      blacklist: List[Tuple[str, str]] | None = None) -> pd.DataFrame:
-
-
-    assert (not whitelist) or (not blacklist)
+def stratify_metadata(metadata: pd.DataFrame, images_per_moa=100,
+                      whitelist: List[Tuple[str, int]] | None = None) -> pd.DataFrame:
 
     if whitelist:
         treatments = whitelist
     else:
-        moas = get_all_MOA_types()
+        compounds = get_all_compound_types()
         concentration = get_all_concentration_types()
-        treatments = list(itertools.product(moas, concentration))
+        treatments = list(itertools.product(compounds, concentration))
 
-    if blacklist:
-        for treatment in blacklist:
-            # treatments to ignore
-            #treatments.remove(('Protein synthesis', 0.3))
-            treatments.remove(treatment)
-
-    groups = metadata.groupby(by=["moa", "Image_Metadata_Concentration"])
+    groups = metadata.groupby(by=["Image_Metadata_Compound", "Image_Metadata_Concentration"])
     stratified = pd.DataFrame(columns=metadata.columns)
 
     for treatment in treatments:
@@ -66,12 +56,13 @@ def stratify_metadata(metadata: pd.DataFrame, images_per_treatment=100,
             if not isinstance(group, pd.DataFrame):
                 raise Exception("Group is not a DataFrame")
 
-            stratified = pd.concat([stratified, group[:images_per_treatment]])
+            stratified = pd.concat([stratified, group[:images_per_moa]])
 
         except Exception:
             pass # treatment combination not in metadata
 
     return stratified
+
 
 def _get_relative_image_path(row: pd.Series) -> str:
     """ concats the multi cell folder name and file name """
@@ -125,11 +116,40 @@ def get_all_concentration_types() -> np.ndarray:
        1.5e+01, 2.0e+01, 3.0e+01, 5.0e+01, 1.0e+02])
 
 
-def get_treatment_types() -> List[Tuple[str, float]]:
-    moas = get_all_MOA_types()
-    concentration = get_all_concentration_types()
-    treatments = list(itertools.product(moas, concentration))
-    return treatments
+def get_all_compound_types() -> np.ndarray:
+    return np.array(['DMSO', 'taxol', 'AZ138', 'AZ-U', 'cytochalasin B', 'nocodazole',
+       'AZ-A', 'latrunculin B', 'epothilone B', 'colchicine',
+       'cytochalasin D', 'ALLN', 'methotrexate', 'MG-132', 'vincristine',
+       'AZ-C', 'AZ841', 'etoposide', 'demecolcine', 'emetine',
+       'cisplatin', 'chlorambucil', 'anisomycin', 'cyclohexamide',
+       'AZ258', 'mitomycin C', 'AZ-J', 'lactacystin', 'docetaxel',
+       'proteasome inhibitor I', 'bryostatin', 'PD-169316',
+       'alsterpaullone', 'camptothecin', 'PP-2', 'mevinolin/lovastatin',
+       'floxuridine', 'simvastatin', 'mitoxantrone'], dtype=object)
+
+
+def get_treatment_whitelist():
+    return [
+        ("AZ138", 0.1), ("AZ138", 0.3), ("AZ138", 1),
+        ("AZ-A", 0.1), ("AZ-A", 0.3), ("AZ-A", 1),
+        ("epothilone B", 0.1), ("epothilone B", 0.3), ("epothilone B", 1),
+        ("vincristine", 0.1), ("vincristine", 0.3), ("vincristine", 1),
+        ("AZ-C", 0.1), ("AZ-C", 0.3), ("AZ-C", 1),
+        ("AZ841", 0.1), ("AZ841", 0.3), ("AZ841", 1),
+        ("emetine", 0.1), ("emetine", 0.3), ("emetine", 1),
+        ("AZ258", 0.1), ("AZ258", 0.3), ("AZ258", 1),
+        ("mitomycin C", 0.1), ("mitomycin C", 0.3), ("mitomycin C", 1),
+        ("DMSO", 0), # no treatment
+    ]
+
+
+def get_treatment_blacklist():
+    return [
+        ("AZ138", 0.3),
+        ("AZ-A", 0.3),
+        ("epothilone B", 0.3),
+        ("vincristine", 0.3),
+    ]
 
 
 # --- Loading result images ---

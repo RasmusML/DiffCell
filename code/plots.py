@@ -16,7 +16,32 @@ def plot_image(image: torch.Tensor, path=None):
 
 
 def plot_channels(image: torch.Tensor, path=None):
-    titles = ["dapi", "tubulin", "actin"]
+    channel_names = ["dapi", "tubulin", "actin"]
+    
+    plt_view = _plot_permute(image)
+    fig, axs = plt.subplots(1, 4, figsize=(16,6))
+    for i in range(3):
+        ax = axs[i]
+        c = torch.zeros_like(plt_view)
+        c[:,:,i] = plt_view[:,:,i]
+
+        ax.set_axis_off()
+        ax.set_title(channel_names[i])
+        ax.imshow(c)
+    
+    ax = axs[3]
+    ax.set_axis_off()
+    ax.set_title("Combined")
+    ax.imshow(plt_view)
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
+
+def plot_only_channels(image: torch.Tensor, path=None):
+    channel_names = ["dapi", "tubulin", "actin"]
     
     plt_view = _plot_permute(image)
     fig, axs = plt.subplots(1, 3, figsize=(16,6))
@@ -26,9 +51,9 @@ def plot_channels(image: torch.Tensor, path=None):
         c[:,:,i] = plt_view[:,:,i]
 
         ax.set_axis_off()
-        ax.set_title(titles[i])
+        ax.set_title(channel_names[i])
         ax.imshow(c)
-    
+   
     if path:
         plt.savefig(path)
     else:
@@ -66,7 +91,7 @@ def plot_MOA_distribution(metadata: pd.DataFrame, path=None):
         plt.show()
 
 
-def plot_treatment_heatmap(metadata: pd.DataFrame, path=None):
+def plot_MOA_and_concentration(metadata: pd.DataFrame, path=None):
     import itertools
     heatmap = {}
     
@@ -110,6 +135,94 @@ def plot_treatment_heatmap(metadata: pd.DataFrame, path=None):
         plt.show()
 
 
+def plot_treatment_heatmap(metadata: pd.DataFrame, path=None):
+    import itertools
+    heatmap = {}
+    
+    compound_types = dataset.get_all_compound_types()
+    concentration_types = dataset.get_all_concentration_types()
+    
+    for compound, concentration in itertools.product(compound_types, concentration_types):
+        heatmap[(compound, concentration)] = 0
+    
+    for i, row in metadata.iterrows():
+        heatmap[(row["Image_Metadata_Compound"], row["Image_Metadata_Concentration"])] += 1
+        
+    heatmap_matrix = np.empty((compound_types.shape[0], concentration_types.shape[0]))
+
+    for i, compound in enumerate(compound_types):
+        for j, concentration in enumerate(concentration_types):
+            heatmap_matrix[i][j] = heatmap[(compound, concentration)]
+    
+    fig, ax = plt.subplots(figsize=(8,10))
+    
+    if not isinstance(ax, plt.Axes):
+        raise Exception("ax is not a plt.Axes")
+    
+    sns.heatmap(np.log10(heatmap_matrix + 1), linewidth=.5, cmap="crest", annot=True)
+    
+    ax.set_xticklabels(concentration_types) # type: ignore
+    for tick in ax.get_xticklabels(): # type: ignore
+        tick.set_rotation(90)
+    
+    ax.set_yticklabels(compound_types) # type: ignore
+    for tick in ax.get_yticklabels(): # type:ignore
+        tick.set_rotation(0)
+    
+    ax.set_title("Treatment count - log10 scale")
+    ax.set_xlabel("Concentration (μmol/L)")
+    ax.set_ylabel("Compound")
+    
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
+
+def plot_compound_and_MOA(metadata: pd.DataFrame, path=None):
+    import itertools
+    heatmap = {}
+    
+    compound_types = dataset.get_all_compound_types()
+    moa_types = dataset.get_all_MOA_types()
+    
+    for compound, moa in itertools.product(compound_types, moa_types):
+        heatmap[(compound, moa)] = 0
+    
+    for i, row in metadata.iterrows():
+        heatmap[(row["Image_Metadata_Compound"], row["moa"])] += 1
+        
+    heatmap_matrix = np.empty((compound_types.shape[0], moa_types.shape[0]))
+
+    for i, compound in enumerate(compound_types):
+        for j, moa in enumerate(moa_types):
+            heatmap_matrix[i][j] = heatmap[(compound, moa)]
+    
+    fig, ax = plt.subplots(figsize=(8,10))
+    
+    if not isinstance(ax, plt.Axes):
+        raise Exception("ax is not a plt.Axes")
+    
+    sns.heatmap(np.log10(heatmap_matrix + 1), linewidth=.5, cmap="crest", annot=True)
+    
+    ax.set_xticklabels(moa_types) # type: ignore
+    for tick in ax.get_xticklabels(): # type: ignore
+        tick.set_rotation(90)
+    
+    ax.set_yticklabels(compound_types) # type: ignore
+    for tick in ax.get_yticklabels(): # type:ignore
+        tick.set_rotation(0)
+    
+    ax.set_title("MOA and Compound count - log10 scale")
+    ax.set_xlabel("MOA")
+    ax.set_ylabel("Compound")
+    
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
+
 def plot_image_diff(image1: torch.Tensor, image2: torch.Tensor, path=None):
     diff = torch.abs(image1 - image2)
     plot_image(diff, path)
@@ -119,6 +232,7 @@ def _plot_permute(image: torch.Tensor) -> torch.Tensor:
     """ 3x68x68 -> 68x68x3 """
     assert image.shape[0] == 3
     return image.permute(1, 2, 0)
+
 
 def plot_epoch_sample_series(images: torch.Tensor, epochs: torch.Tensor, path=None):
     """
@@ -205,6 +319,7 @@ def plot_treatment_classifier_loss(training_data, path=None):
         plt.savefig(path)
     else:
         plt.show()
+
 
 def plot_treatment_classifier_accuracy(training_data, path=None):
     train_accuracy = np.array(training_data["train_accuracy"])

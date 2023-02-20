@@ -19,9 +19,8 @@ def main(args):
     is_local = not args.server
     metadata = load_metadata(is_local)
 
-    blacklist = []
-    validation_metadata = stratify_metadata(metadata, 20, blacklist=blacklist)
-    train_metadata = stratify_metadata(metadata, 3000, blacklist=blacklist).drop(validation_metadata.index, errors="ignore")
+    validation_metadata = stratify_metadata(metadata, 20)
+    train_metadata = stratify_metadata(metadata, 3000).drop(validation_metadata.index, errors="ignore")
 
     _train_images = load_images_from_metadata(train_metadata, is_local)
     _train_images = normalize_image_channel_wise(_train_images)
@@ -33,18 +32,12 @@ def main(args):
     _validation_images = normalized_to_pseudo_zscore(_validation_images)
     validation_images = crop_images(_validation_images)
 
-    if args.model == "both":
-        train_classifier(train_metadata, train_images, validation_metadata, validation_images)
-    elif args.model == "moa":
-        train_MOA_classifier(train_metadata, train_images, validation_metadata, validation_images)
-    elif args.model == "concentration":
-        logging.info("not implemented yet")
-
-
+    #train_MOA_classifier(train_metadata, train_images, validation_metadata, validation_images)
+   
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("model", choices=["both", "moa", "concentration"])
+    #parser.add_argument("model", choices=["compound", "concentration"])
     parser.add_argument("--server", default=False, action="store_true")
 
     args = parser.parse_args()
