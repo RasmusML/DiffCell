@@ -517,10 +517,8 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
 #
 # predictor model
 #
-
-# MOA classifier
-class MOA_classifier(nn.Module): 
-    def __init__(self, c_in=3, N_moas=13):
+class Compound_classifier(nn.Module): 
+    def __init__(self,  N_compounds, c_in=3):
         super().__init__()
         
         self.bulk = nn.Sequential(
@@ -554,15 +552,116 @@ class MOA_classifier(nn.Module):
         
         bulk_outs = 2*256
         
-        self.moa_out = nn.Sequential(
+        self.out = nn.Sequential(
             nn.Linear(bulk_outs, 16),
             nn.Tanh(),
-            nn.Linear(16, N_moas))
+            nn.Linear(16, N_compounds))
         
     def forward(self, images):
         x = self.bulk(images)
-        y_moa = self.moa_out(x)
-        return y_moa
+        y = self.out(x)
+        return y
+
+
+def train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=50, batch_size=32, epoch_sample_times=10):
+    run_name = "Compound_Classifier"
+    make_result_folders(run_name)
+    
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logging.info(f"Using device: {device}")
+
+    compound_types = train_metadata["Image_Metadata_Compound"].unique()
+    compound_to_id, _ = get_label_mappings(compound_types)
+    
+    # prepare train dataset
+    train_compounds = torch.from_numpy(np.array([compound_to_id[c] for c in train_metadata["Image_Metadata_Compound"]]))
+    train_dataset = TensorDataset(train_images, train_compounds)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # prepare validation dataset
+    validation_compounds = torch.from_numpy(np.array([compound_to_id[c] for c in validation_metadata["Image_Metadata_Compound"]]))
+    validation_dataset = TensorDataset(validation_images, validation_compounds)
+    validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False)
+    
+    # setup model and parameters
+    n_compounds = len(compound_types)
+    
+    loss_fn = nn.CrossEntropyLoss()
+    model = Compound_classifier(n_compounds).to(device)
+
+    training_result = {}
+    training_result["train_loss"] = []      # (epoch, loss)
+    training_result["validation_loss"] = [] # (epoch, loss)
+    training_result["train_accuracy"] = []      # (epoch, accuracy)
+    training_result["validation_accuracy"] = [] # (epoch, accuracy)
+    
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=1e-5)
+    
+    k = 0
+    epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
+    
+    for epoch in range(1, epochs+1):
+        logging.info(f"Starting epoch {epoch}:")
+        
+        train_batch_loss = []
+        train_batch_accuracy = []
+
+        pbar = tqdm(train_dataloader)
+        for i, (images, target_compound) in enumerate(pbar):
+            images = images.to(device)
+            target_compound = target_compound.to(device)
+
+            pred_compound = model(images)
+            loss = loss_fn(pred_compound, target_compound)
+
+            optimizer.zero_grad()
+            loss.backward()
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 1_000)
+            optimizer.step()
+            
+            train_batch_loss.append(loss.detach().cpu())
+            
+            accuracy = (torch.sum(pred_compound.max(1)[1] == target_compound)).cpu().numpy() / len(images)
+            train_batch_accuracy.append(accuracy)     
+                
+            pbar.set_postfix(loss=loss.item())
+
+        # store training loss
+        training_result["train_loss"].append((epoch, np.mean(np.array(train_batch_loss))))
+        training_result["train_accuracy"].append((epoch, np.mean(np.array(train_batch_accuracy))))
+        
+        if epoch == epoch_sample_points[k]:
+            k += 1
+            
+            with torch.no_grad():
+                model.eval()
+                
+                validation_batch_loss = []
+                validation_batch_accuracy = []
+                
+                for i, (images, target_compound) in enumerate(validation_dataloader):
+                    images = images.to(device)
+                    target_compound = target_compound.to(device)
+
+                    pred_compound = model(images)
+                    loss = loss_fn(pred_compound, target_compound)
+                    
+                    validation_batch_loss.append(loss.detach().cpu())
+                
+                    accuracy = (torch.sum(pred_compound.max(1)[1] == target_compound)).cpu().numpy() / len(images)
+                    validation_batch_accuracy.append(accuracy)     
+            
+                training_result["validation_loss"].append((epoch, np.mean(np.array(validation_batch_loss))))
+                training_result["validation_accuracy"].append((epoch, np.mean(np.array(validation_batch_accuracy))))
+
+                model.train()
+            
+            # store latest model and performance
+            logging.info("saving")
+            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
+            save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
+
+    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
 
 
 #
@@ -675,7 +774,6 @@ class VariationalInference_VAE(nn.Module):
             diagnostics = {'elbo': beta_elbo, 'image_loss': image_loss, 'kl': kl}
             
         return loss, diagnostics, outputs
-      
 
 
 def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3, weight_decay=1e-4, epoch_sample_times=10):
@@ -707,10 +805,10 @@ def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3,
         training_epoch_data = defaultdict(list)
         vae.train()
         
-        for x in train_dataloader:
-            x = x.to(device)
+        for images in train_dataloader:
+            images = images.to(device)
 
-            loss, diagnostics, outputs = vi(vae, x)
+            loss, diagnostics, outputs = vi(vae, images)
             
             optimizer.zero_grad()
             loss.backward()
@@ -724,19 +822,17 @@ def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3,
         for k, v in training_epoch_data.items():
             training_data[k] = np.mean(training_epoch_data[k])
         
-        print(training_data)
         training_result["train_loss"].append(training_data)
-        print(training_result)
         
         with torch.no_grad():
             vae.eval()
             
             validation_epoch_data = defaultdict(list)
             
-            for x in validation_dataloader:
-                x = x.to(device)
+            for images in validation_dataloader:
+                images = images.to(device)
                 
-                loss, diagnostics, outputs = vi(vae, x)
+                loss, diagnostics, outputs = vi(vae, images)
                 
                 for k, v in diagnostics.items():
                     validation_epoch_data[k] += list(v.cpu().data.numpy())

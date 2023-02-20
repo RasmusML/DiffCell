@@ -17,10 +17,13 @@ def main(args):
 
     logging.info("loading data")
     is_local = not args.server
+
     metadata = load_metadata(is_local)
 
-    validation_metadata = stratify_metadata(metadata, 20)
-    train_metadata = stratify_metadata(metadata, 3000).drop(validation_metadata.index, errors="ignore")
+    whitelist = get_treatment_whitelist()
+    validation_metadata = stratify_metadata(metadata, 30, whitelist=whitelist)
+    train_metadata = stratify_metadata(metadata, 400, whitelist=whitelist).drop(validation_metadata.index, errors="ignore")
+    logging.info(f"training metadata shape:{train_metadata.shape}")
 
     _train_images = load_images_from_metadata(train_metadata, is_local)
     _train_images = normalize_image_channel_wise(_train_images)
@@ -32,7 +35,7 @@ def main(args):
     _validation_images = normalized_to_pseudo_zscore(_validation_images)
     validation_images = crop_images(_validation_images)
 
-    #train_MOA_classifier(train_metadata, train_images, validation_metadata, validation_images)
+    train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images)
    
 
 if __name__ == "__main__":

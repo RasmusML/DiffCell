@@ -36,7 +36,7 @@ def main(args):
     logging.info("training")
     cropped_images = crop_images(images)
 
-    batch_size = 32
+    batch_size = 16
     epochs = 600
     epoch_sample_times = 15
 
