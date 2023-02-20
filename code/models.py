@@ -376,16 +376,6 @@ class Diffusion_conditional:
             return x
 
 
-def get_label_mappings(labels: list[str]):
-    label_to_id = {}
-    id_to_label = {}
-    for i, label in enumerate(labels):
-        label_to_id[label] = i
-        id_to_label[i] = label
-    
-    return label_to_id, id_to_label
-
-
 def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
@@ -563,7 +553,7 @@ class Compound_classifier(nn.Module):
         return y
 
 
-def train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=50, batch_size=32, epoch_sample_times=10):
+def train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=50, batch_size=64, epoch_sample_times=10):
     run_name = "Compound_Classifier"
     make_result_folders(run_name)
     

@@ -27,3 +27,14 @@ def filter_file_extension(files: list[str], extension: str):
     return list(filter(lambda path: path.endswith(extension), files))
 
 
+def get_label_mappings(labels: list[str]):
+    label_to_id = {}
+    id_to_label = {}
+
+    for i, label in enumerate(labels):
+        label_to_id[label] = i
+        id_to_label[i] = label
+
+    return label_to_id, id_to_label
+
+
