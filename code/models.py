@@ -4,7 +4,6 @@ import logging
 from tqdm import tqdm
 import torch
 from torch import optim
-import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
@@ -14,25 +13,12 @@ from collections import defaultdict
 from typing import List, Set, Dict, Tuple, Optional, Any
 
 import numpy as np
-import pandas as pd
-from PIL import Image
 
-from dataset import get_all_MOA_types
 from utils import *
 
-def save_images(images, path, **kwargs):
-    grid = torchvision.utils.make_grid(images, **kwargs)
-    ndarr = grid.permute(1, 2, 0).to('cpu').numpy()
-    im = Image.fromarray(ndarr)
-    im.save(path)
-
-
-def make_result_folders(run_name):
-    os.makedirs("models", exist_ok=True)
-    os.makedirs("results", exist_ok=True)
-    os.makedirs(os.path.join("models", run_name), exist_ok=True)
-    os.makedirs(os.path.join("results", run_name), exist_ok=True)
+def make_training_folders(run_name):
     os.makedirs(os.path.join("results", run_name, "training"), exist_ok=True)
+    os.makedirs(os.path.join("results", run_name, "weights"), exist_ok=True)
 
 def one_param(m):
     "get model first parameter"
@@ -380,7 +366,7 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Unconditional"
-    make_result_folders(run_name)
+    make_training_folders(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
@@ -418,11 +404,8 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
 
             sampled_images = diffusion.sample(model, N_images=images.shape[0])
 
-            epoch_save_dir = os.path.join("results", run_name)
-            np.save(os.path.join(epoch_save_dir, f"{epoch}.npy"), sampled_images.cpu().numpy())
-            #save_images(sampled_images, os.path.join(epoch_save_dir, f"{epoch}.jpg"))
-    
-            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
+            np.save(os.path.join("results", run_name, "training", f"{epoch}.npy"), sampled_images.cpu().numpy())
+            torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt{epoch}.pt"))
 
 
 def log_transform(x: torch.Tensor) -> torch.Tensor:
@@ -433,7 +416,7 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"
 
     run_name = "DDPM_Conditional"
-    make_result_folders(run_name)
+    make_training_folders(run_name)
 
     train_dir = os.path.join("results", run_name, "training")
     
@@ -500,11 +483,10 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
 
             logging.info(f"saving results for epoch {epoch}")
 
-            np.save(os.path.join(train_dir, f"{epoch}.npy"), sampled_images.cpu().numpy())
-            #save_images(sampled_images, os.path.join(epoch_save_dir, f"{epoch}.jpg"))
-            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
+            np.save(os.path.join("results", run_name, "training", f"{epoch}.npy"), sampled_images.cpu().numpy())
+            torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt{epoch}.pt"))
 
-    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+    torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt.pt"))
 
 #
 # predictor model
@@ -557,10 +539,8 @@ class Compound_classifier(nn.Module):
 
 def train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=50, batch_size=64, epoch_sample_times=10):
     run_name = "Compound_Classifier"
-    make_result_folders(run_name)
+    make_training_folders(run_name)
 
-    train_dir = os.path.join("results", run_name, "training")
-    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
 
@@ -652,10 +632,10 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
             
             # store latest model and performance
             logging.info("saving")
-            torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
-            save_dict(training_result, os.path.join(train_dir, "train_results.pkl"))  
+            torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt{epoch}.pt"))
+            save_dict(training_result, os.path.join("results", run_name, "training", "train_results.pkl"))  
 
-    torch.save(model.state_dict(), os.path.join("models", run_name, f"ckpt.pt"))
+    torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt.pt"))
 
 
 #
@@ -772,7 +752,7 @@ class VariationalInference_VAE(nn.Module):
 
 def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3, weight_decay=1e-4, epoch_sample_times=10):
     run_name = "VAE_predictor"
-    make_result_folders(run_name)
+    make_training_folders(run_name)
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
@@ -836,13 +816,15 @@ def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3,
                 validation_data[k] = np.mean(validation_epoch_data[k])
             
             training_result["validation_loss"].append(training_data)
-            save_dict(training_result, os.path.join("results", run_name, "train_results.pkl"))  
+            save_dict(training_result, os.path.join("results", run_name, "training", "train_results.pkl"))  
 
             if epoch == epoch_sample_points[sample_index]:
                 sample_index += 1
                 
-                torch.save(vae.state_dict(), os.path.join("models", run_name, f"ckpt{epoch}.pt"))
+                torch.save(vae.state_dict(), os.path.join("training", run_name, "weights", f"ckpt{epoch}.pt"))
             
+
+    torch.save(vae.state_dict(), os.path.join("training", run_name, "weights", "ckpt.pt"))
     #return validation_data, training_data, params, vae
 
 

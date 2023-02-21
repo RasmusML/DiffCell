@@ -168,4 +168,3 @@ def load_epoch_images(epoch_image_dir: str):
     
     return torch.from_numpy(images), torch.from_numpy(epoch_arr)
 
-

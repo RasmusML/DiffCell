@@ -64,8 +64,6 @@ def main(args):
     logging.info("done sampling")
 
     run_name = "DDPM_Conditional"
-    os.makedirs("results", exist_ok=True)
-    os.makedirs(os.path.join("results", run_name), exist_ok=True)
     os.makedirs(os.path.join("results", run_name, "sampling"), exist_ok=True)
 
     result_dir = os.path.join("results", run_name, "sampling")
