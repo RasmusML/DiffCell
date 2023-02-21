@@ -536,6 +536,76 @@ class Compound_classifier(nn.Module):
         y = self.out(x)
         return y
 
+#
+# Experimential
+#
+
+class Compound_classifier2(nn.Module): 
+    def __init__(self,  N_compounds, c_in=3):
+        super().__init__()
+        
+        self.bulk = nn.Sequential(
+            nn.Conv2d(in_channels=c_in, out_channels=32, kernel_size=3, padding=1),
+            # 64h * 64w * 32ch
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+            nn.Dropout(p=.2),
+
+            # 32h * 32w * 32ch
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 16h * 16w * 32ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+            nn.Dropout(p=.2),
+
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+            # 16h * 16w * 64ch
+            nn.MaxPool2d(2),
+            # 8h * 8w * 64ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(64),
+            nn.Dropout(p=.2),
+
+            nn.Conv2d(in_channels=64, out_channels=96, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 4h * 4w * 96ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(96),
+            nn.Dropout(p=.2),
+
+
+            nn.Conv2d(in_channels=96, out_channels=128, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 2h * 2w * 128ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(128),
+            nn.Dropout(p=.2),
+
+
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 1h * 1w * 256ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(256),
+            nn.Dropout(p=.2),
+
+            nn.Flatten()
+        )
+        
+        bulk_outs = 256
+        
+        self.out = nn.Sequential(
+            nn.Linear(bulk_outs, 64),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.Linear(64, N_compounds))
+        
+    def forward(self, images):
+        x = self.bulk(images)
+        y = self.out(x)
+        return y
+
 
 def train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=50, batch_size=64, epoch_sample_times=10):
     run_name = "Compound_Classifier"
@@ -561,7 +631,7 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
     n_compounds = len(compound_types)
     
     loss_fn = nn.CrossEntropyLoss()
-    model = Compound_classifier(n_compounds).to(device)
+    model = Compound_classifier2(n_compounds).to(device)
 
     training_result = {}
     training_result["train_loss"] = []      # (epoch, loss)
@@ -627,6 +697,8 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
             
                 training_result["validation_loss"].append((epoch, np.mean(np.array(validation_batch_loss))))
                 training_result["validation_accuracy"].append((epoch, np.mean(np.array(validation_batch_accuracy))))
+
+                logging.info(f"validation accuracy: {np.mean(np.array(validation_batch_accuracy))}")
 
                 model.train()
             
