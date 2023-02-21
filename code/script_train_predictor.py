@@ -21,8 +21,8 @@ def main(args):
     metadata = load_metadata(is_local)
 
     whitelist = get_treatment_whitelist()
-    validation_metadata = stratify_metadata(metadata, 30, whitelist=whitelist)
-    train_metadata = stratify_metadata(metadata, 400, whitelist=whitelist).drop(validation_metadata.index, errors="ignore")
+    validation_metadata = stratify_metadata(metadata, 100, whitelist=whitelist)
+    train_metadata = stratify_metadata(metadata, 2000, whitelist=whitelist).drop(validation_metadata.index, errors="ignore")
     logging.info(f"training metadata shape:{train_metadata.shape}")
 
     _train_images = load_images_from_metadata(train_metadata, is_local)
