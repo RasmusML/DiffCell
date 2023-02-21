@@ -22,10 +22,10 @@ def main(args):
     whitelist = get_treatment_whitelist()
     blacklist = get_treatment_blacklist()
     selected = [treatment for treatment in whitelist if treatment not in blacklist]
-    train_metadata = stratify_metadata(metadata, 120, whitelist=selected)
+    train_metadata = stratify_metadata(metadata, 360, whitelist=selected)
 
     compound_types = extract_compound_types(whitelist)
-    concentration_types = extract_concetration_types(whitelist)
+    concentration_types = extract_concentration_types(whitelist)
 
     logging.info("loading images")
     images = load_images_from_metadata(train_metadata, is_local)

@@ -3,6 +3,7 @@ import numpy as np
 from os import listdir
 from os.path import isfile, join
 import pickle
+from sklearn import metrics
 
 def save_dict(dictionary, file):
     with open(file, "wb") as f:
@@ -37,4 +38,11 @@ def get_label_mappings(labels: list[str]):
 
     return label_to_id, id_to_label
 
+def accuracy(target, pred):
+    return metrics.accuracy_score(target.detach().cpu().numpy(), pred.detach().cpu().numpy())
 
+def compute_confusion_matrix(target, pred, normalize=None):
+    return metrics.confusion_matrix(
+        target.detach().cpu().numpy(), 
+        pred.detach().cpu().numpy(),
+        normalize=normalize)

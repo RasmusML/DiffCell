@@ -148,7 +148,7 @@ def extract_compound_types(treatments):
     return compounds
 
 
-def extract_concetration_types(treatments):
+def extract_concentration_types(treatments):
     concentration = list(set([treatment[1] for treatment in treatments]))
     concentration.sort()
     return concentration

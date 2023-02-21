@@ -550,7 +550,7 @@ class Compound_classifier2(nn.Module):
     def __init__(self,  N_compounds, c_in=3):
         super().__init__()
 
-        p=.1
+        p=.02
         
         self.net = nn.Sequential(
             nn.Conv2d(in_channels=c_in, out_channels=32, kernel_size=3, padding=1),
@@ -591,20 +591,20 @@ class Compound_classifier2(nn.Module):
             nn.Dropout(p=p),
 
 
-            nn.Conv2d(in_channels=128, out_channels=512, kernel_size=3, padding=1),
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1),
             nn.MaxPool2d(2),
             # 1h * 1w * 256ch
             nn.LeakyReLU(negative_slope=0.01),
-            nn.BatchNorm2d(512),
+            nn.BatchNorm2d(256),
             nn.Dropout(p=p),
 
             nn.Flatten(),
 
-            nn.Linear(512, 32),
+            nn.Linear(256, 16),
             nn.LeakyReLU(negative_slope=0.01),
-            nn.LazyBatchNorm1d(32),
+            nn.BatchNorm1d(16),
             nn.Dropout(p=p),
-            nn.Linear(32, N_compounds))
+            nn.Linear(16, N_compounds))
         
     def forward(self, images):
         return self.net(images)
@@ -643,10 +643,12 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
     training_result["train_accuracy"] = []      # (epoch, accuracy)
     training_result["validation_accuracy"] = [] # (epoch, accuracy)
     
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, weight_decay=1e-5)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
 
     k = 0
     epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
+
+    l2 = 1e-3
     
     for epoch in range(1, epochs+1):
         logging.info(f"Starting epoch {epoch}:")
@@ -661,6 +663,9 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
 
             pred_compound = model(images)
             loss = loss_fn(pred_compound, target_compound)
+
+            l2_penalty = l2 * sum([(p**2).sum() for p in model.parameters()])
+            loss += l2_penalty
 
             optimizer.zero_grad()
             loss.backward()
