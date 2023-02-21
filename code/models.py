@@ -903,10 +903,10 @@ def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3,
             if epoch == epoch_sample_points[sample_index]:
                 sample_index += 1
                 
-                torch.save(vae.state_dict(), os.path.join("training", run_name, "weights", f"ckpt{epoch}.pt"))
+                torch.save(vae.state_dict(), os.path.join("results", run_name, "weights", f"ckpt{epoch}.pt"))
             
 
-    torch.save(vae.state_dict(), os.path.join("training", run_name, "weights", "ckpt.pt"))
+    torch.save(vae.state_dict(), os.path.join("results", run_name, "weights", "ckpt.pt"))
     #return validation_data, training_data, params, vae
 
 
