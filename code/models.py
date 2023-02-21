@@ -14,6 +14,7 @@ from typing import List, Set, Dict, Tuple, Optional, Any
 
 import numpy as np
 
+from dataset import *
 from utils import *
 
 def make_training_folders(run_name):
@@ -418,8 +419,6 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
     run_name = "DDPM_Conditional"
     make_training_folders(run_name)
 
-    train_dir = os.path.join("results", run_name, "training")
-    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
 
@@ -618,7 +617,8 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     logging.info(f"Using device: {device}")
 
-    compound_types = train_metadata["Image_Metadata_Compound"].unique()
+    whitelist = get_treatment_whitelist()
+    compound_types = extract_compound_types(whitelist)
     compound_to_id, _ = get_label_mappings(compound_types)
     
     # prepare train dataset

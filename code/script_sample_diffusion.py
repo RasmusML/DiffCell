@@ -22,8 +22,8 @@ def main(args):
 
     whitelist = get_treatment_whitelist()
 
-    compound_types = list(set([treatment[0] for treatment in whitelist]))
-    concentration_types = list(set([treatment[1] for treatment in whitelist]))
+    compound_types = extract_compound_types(whitelist)
+    concentration_types = extract_concetration_types(whitelist)
 
     compound_to_id, _ = get_label_mappings(compound_types)
     concentration_to_id, _ = get_label_mappings(concentration_types)

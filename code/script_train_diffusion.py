@@ -24,8 +24,8 @@ def main(args):
     selected = [treatment for treatment in whitelist if treatment not in blacklist]
     train_metadata = stratify_metadata(metadata, 120, whitelist=selected)
 
-    compound_types = list(set([treatment[0] for treatment in whitelist]))
-    concentration_types = list(set([treatment[1] for treatment in whitelist]))
+    compound_types = extract_compound_types(whitelist)
+    concentration_types = extract_concetration_types(whitelist)
 
     logging.info("loading images")
     images = load_images_from_metadata(train_metadata, is_local)

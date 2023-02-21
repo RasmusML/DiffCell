@@ -142,6 +142,17 @@ def get_treatment_whitelist():
         ("DMSO", 0), # no treatment
     ]
 
+def extract_compound_types(treatments):
+    compounds = list(set([treatment[0] for treatment in treatments]))
+    compounds.sort()
+    return compounds
+
+
+def extract_concetration_types(treatments):
+    concentration = list(set([treatment[1] for treatment in treatments]))
+    concentration.sort()
+    return concentration
+
 
 def get_treatment_blacklist():
     return [
