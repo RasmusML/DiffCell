@@ -785,7 +785,7 @@ class Concentration_classifier2(nn.Module):
 
 
 def train_concentration_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=200, batch_size=64, epoch_sample_times=50):
-    run_name = "Concetration_Classifier"
+    run_name = "Concentration_Classifier"
     make_training_folders(run_name)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'

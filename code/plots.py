@@ -341,3 +341,39 @@ def plot_treatment_classifier_accuracy(training_data, path=None):
         plt.show()
 
 
+def plot_VAE_classifier_loss(training_data, path=None):
+    train_loss = training_data["train_loss"]
+    validation_loss = training_data["validation_loss"]
+
+    assert len(train_loss) == len(validation_loss)
+    epochs = np.arange(len(train_loss))
+    
+    train_elbo = [-epoch["elbo"] for epoch in train_loss]
+    train_image_loss = [epoch["image_loss"] for epoch in train_loss]
+    train_kl = [epoch["kl"] for epoch in train_loss]
+    
+    validation_elbo = [-epoch["elbo"] for epoch in validation_loss]
+    validation_image_loss = [epoch["image_loss"] for epoch in validation_loss]
+    validation_kl = [epoch["kl"] for epoch in validation_loss]
+    
+    
+    fig, ax = plt.subplots()
+    ax.set_title("VAE Treatment | Loss")
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    
+    ax.plot(epochs, train_elbo, label="-elbo", linewidth=2., color="blue")
+    ax.plot(epochs, train_image_loss, label="image loss", linestyle="dashed", color="blue")
+    ax.plot(epochs, train_kl, label="KL", linestyle="dotted", color="blue")
+
+    ax.plot(epochs, validation_elbo, label="-elbo", linewidth=2., color="orange")
+    ax.plot(epochs, validation_image_loss, label="image loss", linestyle="dashed", color="orange")
+    ax.plot(epochs, validation_kl, label="KL", linestyle="dotted", color="orange")
+
+    ax.legend(loc="upper left")
+    ax.grid()
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
