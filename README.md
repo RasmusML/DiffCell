@@ -1,2 +1,2 @@
 # 🦠 DiffCell
-> Conditional Generative Modelling for Phenotypic Profilling
+> Conditional Generative Modelling of Single-cell Images

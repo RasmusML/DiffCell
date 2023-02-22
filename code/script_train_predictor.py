@@ -35,12 +35,15 @@ def main(args):
     _validation_images = normalized_to_pseudo_zscore(_validation_images)
     validation_images = crop_images(_validation_images)
 
-    train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images)
+    if args.model == "compound":
+        train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images)
+    elif args.model == "concentration":
+        train_concentration_classifier(train_metadata, train_images, validation_metadata, validation_images)
    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    #parser.add_argument("model", choices=["compound", "concentration"])
+    parser.add_argument("model", choices=["compound", "concentration"])
     parser.add_argument("--server", default=False, action="store_true")
 
     args = parser.parse_args()

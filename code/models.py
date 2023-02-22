@@ -720,6 +720,180 @@ def train_compound_classifier(train_metadata, train_images, validation_metadata,
     torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt.pt"))
 
 
+class Concentration_classifier2(nn.Module): 
+    def __init__(self,  N_concentrations, c_in=3):
+        super().__init__()
+
+        p=.02
+        
+        self.net = nn.Sequential(
+            nn.Conv2d(in_channels=c_in, out_channels=32, kernel_size=3, padding=1),
+            # 64h * 64w * 32ch
+            nn.MaxPool2d(2),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+            nn.Dropout(p=p),
+
+            # 32h * 32w * 32ch
+            nn.Conv2d(in_channels=32, out_channels=32, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 16h * 16w * 32ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(32),
+            nn.Dropout(p=p),
+
+            nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
+            # 16h * 16w * 64ch
+            nn.MaxPool2d(2),
+            # 8h * 8w * 64ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(64),
+            nn.Dropout(p=p),
+
+            nn.Conv2d(in_channels=64, out_channels=96, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 4h * 4w * 96ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(96),
+            nn.Dropout(p=p),
+
+            nn.Conv2d(in_channels=96, out_channels=128, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 2h * 2w * 128ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(128),
+            nn.Dropout(p=p),
+
+
+            nn.Conv2d(in_channels=128, out_channels=256, kernel_size=3, padding=1),
+            nn.MaxPool2d(2),
+            # 1h * 1w * 256ch
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm2d(256),
+            nn.Dropout(p=p),
+
+            nn.Flatten(),
+
+            nn.Linear(256, 16),
+            nn.LeakyReLU(negative_slope=0.01),
+            nn.BatchNorm1d(16),
+            nn.Dropout(p=p),
+            nn.Linear(16, N_concentrations))
+        
+    def forward(self, images):
+        return self.net(images)
+
+
+def train_concentration_classifier(train_metadata, train_images, validation_metadata, validation_images, lr=0.001, epochs=200, batch_size=64, epoch_sample_times=50):
+    run_name = "Concetration_Classifier"
+    make_training_folders(run_name)
+
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    logging.info(f"Using device: {device}")
+
+    whitelist = get_treatment_whitelist()
+    concentration_types = extract_concentration_types(whitelist)
+    concentration_to_id, _ = get_label_mappings(concentration_types)
+    
+    # prepare train dataset
+    train_concentrations = torch.from_numpy(np.array([concentration_to_id[c] for c in train_metadata["Image_Metadata_Concentration"]]))
+    train_dataset = TensorDataset(train_images, train_concentrations)
+    train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    # prepare validation dataset
+    validation_compounds = torch.from_numpy(np.array([concentration_to_id[c] for c in validation_metadata["Image_Metadata_Concentration"]]))
+    validation_dataset = TensorDataset(validation_images, validation_compounds)
+    validation_dataloader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False)
+    
+    # setup model and parameters
+    n_concentrations = len(concentration_types)
+    
+    loss_fn = nn.CrossEntropyLoss()
+    model = Concentration_classifier2(n_concentrations).to(device)
+
+    training_result = {}
+    training_result["train_loss"] = []      # (epoch, loss)
+    training_result["validation_loss"] = [] # (epoch, loss)
+    training_result["train_accuracy"] = []      # (epoch, accuracy)
+    training_result["validation_accuracy"] = [] # (epoch, accuracy)
+    
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+
+    k = 0
+    epoch_sample_points = torch.linspace(1, epochs, epoch_sample_times, dtype=torch.int32)
+
+    l2 = 1e-3
+    
+    for epoch in range(1, epochs+1):
+        logging.info(f"Starting epoch {epoch}:")
+        
+        train_batch_loss = []
+        train_batch_accuracy = []
+
+        pbar = tqdm(train_dataloader)
+        for i, (images, target_concentration) in enumerate(pbar):
+            images = images.to(device)
+            target_concentration = target_concentration.to(device)
+
+            pred_concentration = model(images)
+            loss = loss_fn(pred_concentration, target_concentration)
+
+            l2_penalty = l2 * sum([(p**2).sum() for p in model.parameters()])
+            loss += l2_penalty
+
+            optimizer.zero_grad()
+            loss.backward()
+            #torch.nn.utils.clip_grad_norm_(model.parameters(), 1_000)
+            optimizer.step()
+            
+            train_batch_loss.append(loss.detach().cpu())
+            
+            accuracy = (torch.sum(pred_concentration.max(1)[1] == target_concentration)).cpu().numpy() / len(images)
+            train_batch_accuracy.append(accuracy)     
+                
+            pbar.set_postfix(loss=loss.item())
+
+        # store training loss
+        training_result["train_loss"].append((epoch, np.mean(np.array(train_batch_loss))))
+        training_result["train_accuracy"].append((epoch, np.mean(np.array(train_batch_accuracy))))
+        
+        if epoch == epoch_sample_points[k]:
+            k += 1
+            
+            with torch.no_grad():
+                model.eval()
+                
+                validation_batch_loss = []
+                validation_batch_accuracy = []
+                
+                for i, (images, target_concentration) in enumerate(validation_dataloader):
+                    images = images.to(device)
+                    target_concentration = target_concentration.to(device)
+
+                    pred_concentration = model(images)
+                    loss = loss_fn(pred_concentration, target_concentration)
+                    
+                    validation_batch_loss.append(loss.detach().cpu())
+                
+                    accuracy = (torch.sum(pred_concentration.max(1)[1] == target_concentration)).cpu().numpy() / len(images)
+                    validation_batch_accuracy.append(accuracy)     
+            
+                training_result["validation_loss"].append((epoch, np.mean(np.array(validation_batch_loss))))
+                training_result["validation_accuracy"].append((epoch, np.mean(np.array(validation_batch_accuracy))))
+
+                logging.info(f"train accuracy: {np.mean(np.array(train_batch_accuracy))}")
+                logging.info(f"validation accuracy: {np.mean(np.array(validation_batch_accuracy))}")
+
+                model.train()
+            
+            # store latest model and performance
+            logging.info("saving")
+            torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt{epoch}.pt"))
+            save_dict(training_result, os.path.join("results", run_name, "training", "train_results.pkl"))  
+
+    torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt.pt"))
+
+
 #
 # VAE
 #
