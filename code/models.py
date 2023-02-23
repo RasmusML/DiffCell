@@ -333,34 +333,34 @@ class Diffusion_conditional:
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
     def sample(self, model, N_images, y_compounds, y_concentrations, cfg_scale=3):
-            logging.info(f"Sampling {N_images} new images....")
-            model.eval()
+        logging.info(f"Sampling {N_images} new images....")
+        model.eval()
 
-            with torch.no_grad():
-                x = torch.randn((N_images, 3, self.img_size, self.img_size)).to(self.device)
+        with torch.no_grad():
+            x = torch.randn((N_images, 3, self.img_size, self.img_size)).to(self.device)
 
-                for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
-                    t = (torch.ones(N_images) * i).long().to(self.device)
-                    predicted_noise = model(x, t, y_compounds, y_concentrations)
-                    if cfg_scale > 0:
-                        uncond_predicted_noise = model(x, t, None, None)
-                        predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
+            for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
+                t = (torch.ones(N_images) * i).long().to(self.device)
+                predicted_noise = model(x, t, y_compounds, y_concentrations)
+                if cfg_scale > 0:
+                    uncond_predicted_noise = model(x, t, None, None)
+                    predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
 
-                    alpha = self.alpha[t][:, None, None, None]
-                    alpha_hat = self.alpha_hat[t][:, None, None, None]
-                    beta = self.beta[t][:, None, None, None]
+                alpha = self.alpha[t][:, None, None, None]
+                alpha_hat = self.alpha_hat[t][:, None, None, None]
+                beta = self.beta[t][:, None, None, None]
 
-                    if i > 1:
-                        noise = torch.randn_like(x)
-                    else:
-                        noise = torch.zeros_like(x)
+                if i > 1:
+                    noise = torch.randn_like(x)
+                else:
+                    noise = torch.zeros_like(x)
 
-                    x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
+                x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
 
-            model.train()
-            x = (x.clamp(-1, 1) + 1) / 2
+        model.train()
+        x = (x.clamp(-1, 1) + 1) / 2
 
-            return x
+        return x
 
 
 def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
@@ -407,10 +407,6 @@ def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size
 
             np.save(os.path.join("results", run_name, "training", f"{epoch}.npy"), sampled_images.cpu().numpy())
             torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt{epoch}.pt"))
-
-
-def log_transform(x: torch.Tensor) -> torch.Tensor:
-    return torch.log(x + 1.0)
 
 
 def train_conditional_diffusion_model(metadata, images, compound_types, concentration_types, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
@@ -543,7 +539,7 @@ class Compound_classifier(nn.Module):
         return y
 
 #
-# Experimential
+# Improved classifiers
 #
 
 class Compound_classifier2(nn.Module): 

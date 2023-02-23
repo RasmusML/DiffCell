@@ -31,7 +31,7 @@ def main(args):
     images = load_images_from_metadata(train_metadata, is_local)
 
     images = normalize_image_channel_wise(images)
-    images = normalized_to_pseudo_zscore(images)
+    #images = normalized_to_pseudo_zscore(images)
 
     logging.info("training")
     cropped_images = crop_images(images)
