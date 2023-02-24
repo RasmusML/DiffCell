@@ -298,8 +298,8 @@ class Diffusion:
 
                 x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
 
-        model.train()
         x = (x.clamp(-1, 1) + 1) / 2
+        model.train()
 
         return x
 
@@ -355,8 +355,8 @@ class Diffusion_conditional:
 
                 x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
 
-        model.train()
         x = (x.clamp(-1, 1) + 1) / 2
+        model.train()
 
         return x
 
@@ -466,7 +466,6 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
             optimizer.step()
 
             results["loss"].append(loss.detach().cpu())
-            save_dict(results, os.path.join("results", run_name, "training", "results.pkl"))
 
             pbar.set_postfix(MSE=loss.item())
 
@@ -485,8 +484,8 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
             np.save(os.path.join("results", run_name, "training", f"{epoch}.npy"), sampled_images.cpu().numpy())
             torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt{epoch}.pt"))
 
-
     torch.save(model.state_dict(), os.path.join("results", run_name, "weights", f"ckpt.pt"))
+    save_dict(results, os.path.join("results", run_name, "training", "results.pkl"))
 
 #
 # predictor model

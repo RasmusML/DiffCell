@@ -22,7 +22,7 @@ def main(args):
     whitelist = get_treatment_whitelist()
     blacklist = get_treatment_blacklist()
     selected = [treatment for treatment in whitelist if treatment not in blacklist]
-    train_metadata = stratify_metadata(metadata, 120, whitelist=selected)
+    train_metadata = stratify_metadata(metadata, 360, whitelist=selected)
 
     compound_types = extract_compound_types(whitelist)
     concentration_types = extract_concentration_types(whitelist)
@@ -31,7 +31,7 @@ def main(args):
     images = load_images_from_metadata(train_metadata, is_local)
 
     images = normalize_image_channel_wise(images)
-    #images = normalized_to_pseudo_zscore(images)
+    images = normalized_to_pseudo_zscore(images)
 
     logging.info("training")
     cropped_images = crop_images(images)
