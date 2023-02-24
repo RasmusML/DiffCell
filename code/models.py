@@ -1,17 +1,15 @@
 import os
 import logging
 
+from collections import defaultdict
+from typing import List, Set, Dict, Tuple, Optional, Any
+
 from tqdm import tqdm
 import torch
 from torch import optim
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
-
-from collections import defaultdict
-
-from typing import List, Set, Dict, Tuple, Optional, Any
-
 import numpy as np
 
 from dataset import *

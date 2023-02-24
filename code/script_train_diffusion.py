@@ -22,7 +22,7 @@ def main(args):
     whitelist = get_treatment_whitelist()
     blacklist = get_treatment_blacklist()
     selected = [treatment for treatment in whitelist if treatment not in blacklist]
-    train_metadata = stratify_metadata(metadata, 360, whitelist=selected)
+    train_metadata = stratify_metadata(metadata, 120, whitelist=selected)
 
     compound_types = extract_compound_types(whitelist)
     concentration_types = extract_concentration_types(whitelist)

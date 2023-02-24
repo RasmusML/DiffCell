@@ -1,10 +1,10 @@
 #!/bin/sh
 #BSUB -q gpua100
-#BSUB -gpu "num=1"
-#BSUB -J myJob
+#BSUB -J rmlsJob
 #BSUB -n 1
+#BSUB -gpu "num=1:mode=exclusive_process"
 #BSUB -W 16:00
-#BSUB -R "rusage[mem=64GB]"
+#BSUB -R "rusage[mem=10GB]"
 #BSUB -o logs/%J.out
 #BSUB -e logs/%J.err
 python3 code/script_train_diffusion.py --server
