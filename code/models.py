@@ -894,7 +894,7 @@ def train_concentration_classifier(train_metadata, train_images, validation_meta
 class CytoVariationalAutoencoder(nn.Module):
  
     def __init__(self, input_shape, latent_features: int):
-        super(CytoVariationalAutoencoder, self).__init__()
+        super().__init__()
         
         self.input_shape = input_shape
         self.latent_features = latent_features
@@ -999,7 +999,7 @@ class VariationalInference_VAE(nn.Module):
         return loss, diagnostics, outputs
 
 
-def train_VAE(training_data, validation_data, epochs=50, batch_size=32, lr=1e-3, weight_decay=1e-4, epoch_sample_times=10):
+def train_VAE(training_data, validation_data, epochs=500, batch_size=32, lr=1e-3, weight_decay=1e-4, epoch_sample_times=10):
     run_name = "VAE_predictor"
     make_training_folders(run_name)
     

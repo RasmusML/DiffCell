@@ -21,8 +21,8 @@ def main(args):
 
     metadata = load_metadata(is_local)
 
-    validation_metadata = stratify_metadata(metadata, 20)
-    train_metadata = stratify_metadata(metadata, 420)
+    validation_metadata = stratify_metadata(metadata, 50)
+    train_metadata = stratify_metadata(metadata, 800)
 
     _train_images = load_images_from_metadata(train_metadata, is_local)
     _train_images = normalize_image_channel_wise(_train_images)

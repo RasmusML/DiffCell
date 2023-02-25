@@ -8,11 +8,10 @@
 * [Variational Sparse Coding](https://openreview.net/pdf?id=SkeJ6iR9Km)
 
 ## Direction
-Train a diffusion model conditioned on treatment (treatment := (MOA, concentration))
+Train a diffusion model conditioned on treatment (treatment := (compound, concentration))
 - Maybe log-transform concentration 
-- Add VAE
 
 Use a classifier to predict treatment
 - regression problem on concentration level
-- classification problem on MOA
-
+- classification problem on compound
+- Consider adding VAE

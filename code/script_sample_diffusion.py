@@ -74,8 +74,8 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--batch_size", default=16, type=int)
-    parser.add_argument("--N_treatment_samples", default=6, type=int)
-    parser.add_argument("--pretrained", default="./results/DDPM_Conditional/weights/ckpt600.pt", type=str)
+    parser.add_argument("--N_treatment_samples", default=64, type=int)
+    parser.add_argument("--pretrained", default="./results/DDPM_Conditional/weights/ckpt.pt", type=str)
 
     args = parser.parse_args()
 

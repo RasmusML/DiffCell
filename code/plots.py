@@ -295,6 +295,49 @@ def plot_images(images: torch.Tensor, title=None, path=None):
     else:
         plt.show()
 
+def plot_images_2d(images: torch.Tensor, title=None, path=None, border_colors=None, row_labels=None, column_labels=None):
+    """
+        Example: 4 sample images has input dim: [r, c, 3, 68, 68]
+    """
+    
+    n_rows = images.shape[0]
+    n_cols = images.shape[1]
+
+    fig, axs = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(n_cols, n_rows))
+    fig.subplots_adjust(wspace=0.05, hspace=0.05)
+
+    if title:
+        fig.subplots_adjust(top=0.75)
+        fig.suptitle(title)
+        
+    for r in range(n_rows):
+        for c in range(n_cols):
+            ax = axs[r, c]
+
+            ax.imshow(_plot_permute(images[r, c]))
+            ax.set_yticks([])
+            ax.set_xticks([])
+
+            if border_colors:
+                color = border_colors.get((r,c), None)
+
+                if color:
+                    for spine in ax.spines.values():
+                        spine.set_edgecolor(color)
+
+            if column_labels and r == n_rows-1:
+                ax.set_xlabel(column_labels[c], rotation=45)
+            
+            if row_labels and c == 0:
+                ax.set_ylabel(row_labels[r])
+ 
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
+
 
 def plot_treatment_classifier_loss(training_data, path=None):
     train_loss = np.array(training_data["train_loss"])
