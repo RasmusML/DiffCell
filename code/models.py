@@ -360,6 +360,40 @@ class Diffusion_conditional:
 
         return x
 
+    def sample2(self, model, N_images, y_compounds, y_concentrations, cfg_scale=3, store_count=10):
+        logging.info(f"Sampling {N_images} new images....")
+        model.eval()
+
+        space_index = 0
+        spacing = np.linspace(self.noise_steps-1, 1, store_count, dtype=np.int32)
+        xs = torch.empty((len(spacing), N_images, 3, self.img_size, self.img_size))
+
+        with torch.no_grad():
+            x = torch.randn((N_images, 3, self.img_size, self.img_size)).to(self.device)
+
+            for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
+                t = (torch.ones(N_images) * i).long().to(self.device)
+                predicted_noise = model(x, t, y_compounds, y_concentrations)
+                if cfg_scale > 0:
+                    uncond_predicted_noise = model(x, t, None, None)
+                    predicted_noise = torch.lerp(uncond_predicted_noise, predicted_noise, cfg_scale)
+
+                alpha = self.alpha[t][:, None, None, None]
+                alpha_hat = self.alpha_hat[t][:, None, None, None]
+                beta = self.beta[t][:, None, None, None]
+
+                if i > 1:
+                    noise = torch.randn_like(x)
+                else:
+                    noise = torch.zeros_like(x)
+
+                x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
+
+                if i == spacing[space_index]:
+                    xs[space_index] = (x.clone().clamp(-1, 1) + 1) / 2
+                    space_index += 1
+
+        return xs
 
 def train_diffusion_model(metadata, images, image_size=64, epochs=10, batch_size=2, lr=3e-4, epoch_sample_times=5):
     assert epoch_sample_times <= epochs, "can't sample more times than total epochs"

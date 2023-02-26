@@ -264,6 +264,36 @@ def plot_epoch_sample_series(images: torch.Tensor, epochs: torch.Tensor, path=No
     else:
         plt.show()
 
+def plot_sample_series(images: torch.Tensor, xtitle: str, xlabels: np.ndarray, title=None, path=None):
+    """
+        Example: series length 10, each with 4 sample images has input dim: [10, 4, 3, 68, 68]
+    """
+    n_cols = images.shape[0]
+    n_rows = images.shape[1]
+    
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(n_cols,n_rows))
+    fig.subplots_adjust(wspace=0.05, hspace=0.05)
+
+    fig.suptitle(title)
+    fig.text(0.5, 0.0, xtitle, ha="center")
+    fig.text(0.1, 0.5, "Samples", va="center", rotation="vertical")
+
+    for r in range(n_rows):
+        for c in range(n_cols):
+            ax = axs[r,c]
+
+            ax.imshow(_plot_permute(images[c, r]))
+            ax.set_yticks([])
+            ax.set_xticks([])
+
+            if r == n_rows-1:
+                ax.set_xlabel(xlabels[c])
+
+    if path:
+        plt.savefig(path)
+    else:
+        plt.show()
+
 
 def flatten_images_to_plot(images: torch.Tensor) -> torch.Tensor:
     """ 8x3x64x64 -> 3x64x8*64 """
@@ -364,12 +394,15 @@ def plot_treatment_classifier_loss(training_data, path=None):
         plt.show()
 
 
-def plot_treatment_classifier_accuracy(training_data, path=None):
+def plot_treatment_classifier_accuracy(training_data, title=None, path=None):
     train_accuracy = np.array(training_data["train_accuracy"])
     validation_accuracy = np.array(training_data["validation_accuracy"])
 
     fig, ax = plt.subplots()
-    ax.set_title("Treatment Classifier | Accuracy")
+
+    if title:
+        ax.set_title(title)
+
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Accuracy (%)")
     ax.plot(train_accuracy[:,0], train_accuracy[:,1] * 100, label="Train", linewidth=2., color="blue")
