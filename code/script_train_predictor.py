@@ -21,8 +21,8 @@ def main(args):
     metadata = load_metadata(is_local)
 
     whitelist = get_treatment_whitelist()
-    validation_metadata = stratify_metadata(metadata, 100, whitelist=whitelist)
-    train_metadata = stratify_metadata(metadata, 1800, whitelist=whitelist).drop(validation_metadata.index, errors="ignore")
+    validation_metadata = stratify_metadata(metadata, 10, whitelist=whitelist)
+    train_metadata = stratify_metadata(metadata, 50, whitelist=whitelist).drop(validation_metadata.index, errors="ignore")
     logging.info(f"training metadata shape:{train_metadata.shape}")
 
     _train_images = load_images_from_metadata(train_metadata, is_local)
@@ -39,11 +39,13 @@ def main(args):
         train_compound_classifier(train_metadata, train_images, validation_metadata, validation_images)
     elif args.model == "concentration":
         train_concentration_classifier(train_metadata, train_images, validation_metadata, validation_images)
+    elif args.model == "concentration2":
+        train_concentration_classifier2(train_metadata, train_images, validation_metadata, validation_images)
    
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("model", choices=["compound", "concentration"])
+    parser.add_argument("model", choices=["compound", "concentration", "concentration2"])
     parser.add_argument("--server", default=False, action="store_true")
 
     args = parser.parse_args()
