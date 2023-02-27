@@ -524,7 +524,7 @@ def train_conditional_diffusion_model(metadata, images, compound_types, concentr
 #
 # predictor model
 #
-class Compound_classifier2(nn.Module): 
+class Compound_classifier(nn.Module): 
     def __init__(self,  N_compounds, c_in=3):
         super().__init__()
 
@@ -877,7 +877,7 @@ def train_concentration_classifier(train_metadata, train_images, validation_meta
 #
 
 class Concentration_classifier2(nn.Module): 
-    def __init__(self,  N_concentrations, N_compounds=10, c_in=3):
+    def __init__(self,  N_concentrations, N_compounds, c_in=3):
         super().__init__()
 
         p=.02
@@ -971,9 +971,10 @@ def train_concentration_classifier2(train_metadata, train_images, validation_met
     
     # setup model and parameters
     n_concentrations = len(concentration_types)
+    n_compounds = len(compound_types)
     
     loss_fn = nn.CrossEntropyLoss()
-    model = Concentration_classifier2(n_concentrations).to(device)
+    model = Concentration_classifier2(n_concentrations, n_compounds).to(device)
 
     training_result = {}
     training_result["train_loss"] = []      # (epoch, loss)
@@ -998,7 +999,7 @@ def train_concentration_classifier2(train_metadata, train_images, validation_met
         for i, (images, compound, target_concentration) in enumerate(pbar):
             images = images.to(device)
 
-            compound = F.one_hot(compound)
+            compound = F.one_hot(compound, num_classes=n_compounds)
             compound = compound.to(device)
 
             target_concentration = target_concentration.to(device)
@@ -1037,7 +1038,7 @@ def train_concentration_classifier2(train_metadata, train_images, validation_met
                 for i, (images, compound, target_concentration) in enumerate(validation_dataloader):
                     images = images.to(device)
 
-                    compound = F.one_hot(compound)
+                    compound = F.one_hot(compound, num_classes=n_compounds)
                     compound = compound.to(device)
 
                     target_concentration = target_concentration.to(device)

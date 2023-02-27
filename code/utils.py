@@ -38,11 +38,18 @@ def get_label_mappings(labels: list[str]):
 
     return label_to_id, id_to_label
 
+
 def accuracy(target, pred):
     return metrics.accuracy_score(target.detach().cpu().numpy(), pred.detach().cpu().numpy())
+
 
 def compute_confusion_matrix(target, pred, normalize=None):
     return metrics.confusion_matrix(
         target.detach().cpu().numpy(), 
         pred.detach().cpu().numpy(),
         normalize=normalize)
+
+
+def normalize(matrix, axis):
+    axis = {'true': 1, 'pred': 0}[axis]
+    return matrix / matrix.sum(axis=axis, keepdims=True)
